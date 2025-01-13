@@ -1,5 +1,5 @@
 [workspace]
 
 members = [
-"editor", "termux",
+"editor", "termux","gap_buffer"
 ]

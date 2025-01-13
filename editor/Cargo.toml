@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 termux = { path = "../termux"}
+gap_buffer = {path = "../gap_buffer"}
 libc = "0.2"

@@ -3,10 +3,8 @@ pub use color::Colors;
 use std::io::{self, Write};
 
 pub struct Cursor {
-    cur_row: u32,
-    cur_col: u32,
-    prev_row: u32,
-    prev_col: u32,
+    user_row: u32,
+    user_col: u32,
 }
 
 impl Cursor {
@@ -15,18 +13,16 @@ impl Cursor {
     // home position in ascii is considered (1,1)
     pub fn new() -> Self {
         Cursor {
-            cur_row: 1,
-            cur_col: 1,
-            prev_row: 1,
-            prev_col: 1,
+            user_row: 1,
+            user_col: 1,
         }
     }
 
-    pub fn prev_col(&self) -> u32 {
-        self.prev_col
+    pub fn user_col(&self) -> u32 {
+        self.user_col
     }
-    pub fn prev_row(&self) -> u32 {
-        self.prev_row
+    pub fn user_row(&self) -> u32 {
+        self.user_row
     }
     pub fn move_home(&mut self) -> std::io::Result<()> {
         self.reset_coords();
@@ -36,8 +32,10 @@ impl Cursor {
         self.inc_col(num);
         write!(io::stdout(), "\x1b[{num}C",)
     }
-    pub fn move_left(&mut self, num: u32) -> std::io::Result<()> {
-        self.dec_col(num);
+    pub fn move_left(&mut self, num: u32, command_mode: bool) -> std::io::Result<()> {
+        if !command_mode {
+            self.dec_col(num);
+        }
         write!(io::stdout(), "\x1b[{num}D",)
     }
 
@@ -52,60 +50,50 @@ impl Cursor {
     }
 
     pub fn move_cursor_to(&mut self, line: u32, column: u32) -> std::io::Result<()> {
-        self.prev_row = self.cur_row;
-        self.prev_col = self.cur_col;
-
-        self.cur_row = line;
-        self.cur_col = column;
-
         // syntax for the escape is line;column
         write!(io::stdout(), "\x1b[{line};{column}f")
     }
 
     pub fn restore_cursor_position(&mut self) -> Result<(), std::io::Error> {
-        let restore_line = self.prev_row;
-        let restore_column = self.prev_col;
-
-        self.prev_col = self.cur_col;
-        self.prev_row = self.cur_row;
-
-        //restore previous coords to the current coords
-        self.cur_row = restore_line;
-        self.cur_col = restore_column;
-        write!(io::stdout(), "\x1b[{restore_line};{restore_column}f")?;
+        write!(io::stdout(), "\x1b[{};{}f", self.user_row, self.user_col)?;
         Ok(())
     }
-    pub fn backspace(&mut self) -> std::io::Result<()> {
-        self.move_left(1)?;
+    pub fn backspace(&mut self, command_mode: bool) -> std::io::Result<()> {
+        self.move_left(1, command_mode)?;
         write!(io::stdout(), " ")?;
-        io::stdout().flush().unwrap();
+        if command_mode {
+            self.move_left(1, command_mode)?;
+        }
 
         Ok(())
     }
     fn reset_coords(&mut self) {
-        self.cur_row = 1;
-        self.cur_col = 1;
+        self.user_row = 1;
+        self.user_col = 1;
     }
     pub fn reset_modes(&self) -> std::io::Result<()> {
         write!(io::stdout(), "\x1b[0m")
     }
     fn inc_row(&mut self, num: u32) {
-        self.cur_row += num;
+        self.user_row += num;
     }
     fn dec_row(&mut self, num: u32) {
-        if self.cur_row != 1 {
-            self.cur_row -= num;
+        if self.user_row != 1 {
+            self.user_row -= num;
         }
     }
     fn inc_col(&mut self, num: u32) {
-        self.cur_col += num;
+        self.user_col += num;
     }
     fn dec_col(&mut self, num: u32) {
-        if self.cur_col != 1 {
-            self.cur_col -= num;
+        if self.user_col != 1 {
+            self.user_col -= num;
         }
     }
-    pub fn write_char(&self, character: &u8) -> std::io::Result<()> {
+    pub fn write_char(&mut self, character: &u8, command_mode: bool) -> std::io::Result<()> {
+        if !command_mode {
+            self.inc_col(1);
+        }
         write!(io::stdout(), "{}", *character as char)
     }
     pub fn set_foreground(&self, color: i32) -> std::io::Result<()> {
@@ -116,5 +104,17 @@ impl Cursor {
     }
     pub fn delete_end_of_line(&self) -> std::io::Result<()> {
         write!(io::stdout(), "\x1b[0K")
+    }
+    pub fn draw_line(&mut self, line_num: u32, length: usize, color: i32) -> std::io::Result<()> {
+        self.move_cursor_to(line_num, 1)?;
+
+        self.set_background(color)?;
+
+        let bar = std::iter::repeat(" ").take(length).collect::<String>();
+
+        write!(io::stdout(), "{}", bar)?;
+
+        self.restore_cursor_position()?;
+        Ok(())
     }
 }
