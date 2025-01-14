@@ -1,11 +1,25 @@
 pub mod cursor;
-pub use cursor::Colors;
+pub use cursor::{Colors, Cursor};
 use libc;
 use std::error::Error;
 use std::io::{self, Write};
 use termios::{tcsetattr, Termios, ECHO, ICANON, TCSANOW};
 
-pub fn get_terminal_size() -> libc::winsize {
+pub struct TerminalTools {
+    pub cursor: Cursor,
+    pub terminal_attributes: libc::winsize,
+}
+
+impl TerminalTools {
+    pub fn new() -> Self {
+        TerminalTools {
+            cursor: Cursor::new(),
+            terminal_attributes: get_terminal_size(),
+        }
+    }
+}
+
+fn get_terminal_size() -> libc::winsize {
     let mut terminal_window_attr = libc::winsize {
         ws_row: 0,
         ws_col: 0,

@@ -24,6 +24,13 @@ impl Cursor {
     pub fn user_row(&self) -> u32 {
         self.user_row
     }
+    fn set_user_row(&mut self, row: u32) {
+        self.user_row = row;
+    }
+    fn set_user_col(&mut self, col: u32) {
+        self.user_col = col;
+    }
+
     pub fn move_home(&mut self) -> std::io::Result<()> {
         self.reset_coords();
         write!(io::stdout(), "\x1b[H")
@@ -54,9 +61,16 @@ impl Cursor {
         write!(io::stdout(), "\x1b[{line};{column}f")
     }
 
+    pub fn return_newline(&mut self) -> std::io::Result<()> {
+        self.set_user_col(1);
+
+        let row = self.inc_row(1);
+        let col = self.user_col();
+
+        self.move_cursor_to(row, col)
+    }
     pub fn restore_cursor_position(&mut self) -> Result<(), std::io::Error> {
-        write!(io::stdout(), "\x1b[{};{}f", self.user_row, self.user_col)?;
-        Ok(())
+        write!(io::stdout(), "\x1b[{};{}f", self.user_row, self.user_col)
     }
     pub fn backspace(&mut self, command_mode: bool) -> std::io::Result<()> {
         self.move_left(1, command_mode)?;
@@ -74,8 +88,9 @@ impl Cursor {
     pub fn reset_modes(&self) -> std::io::Result<()> {
         write!(io::stdout(), "\x1b[0m")
     }
-    fn inc_row(&mut self, num: u32) {
+    fn inc_row(&mut self, num: u32) -> u32 {
         self.user_row += num;
+        self.user_row()
     }
     fn dec_row(&mut self, num: u32) {
         if self.user_row != 1 {

@@ -1,10 +1,9 @@
 mod tui;
 use gap_buffer::GapBuffer;
-use libc;
 use std::error::Error;
+use std::fs;
 use std::io::{self, Read, Write};
 use std::process;
-use termux;
 
 #[derive(Clone, Copy)]
 enum EditorMode {
@@ -25,110 +24,135 @@ impl EditorMode {
     }
 }
 
-struct EditorData {
-    reader: io::Stdin,
-    character_buffer: [u8; 1],
+pub struct FileData {
+    file_name: String,
+    file_handle: fs::File,
     file_contents_buffer: GapBuffer,
+}
+
+impl FileData {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<FileData, &'static str> {
+        args.next();
+
+        let file_name = match args.next() {
+            Some(arg) => arg,
+            None => return Err("No file name provided, exiting..."),
+        };
+
+        let file_handle;
+        let file_contents;
+        //if Path::new(&file_name).exists() {
+        // open the file and read the lines into the terminal... or
+        // at least collect it so that it is easy to do so later.
+        file_handle = fs::File::open(&file_name).unwrap();
+        file_contents = fs::read_to_string(&file_name).unwrap();
+        //}
+        let file_contents_buffer = GapBuffer::new(Some(file_contents));
+
+        Ok(FileData {
+            file_name,
+            file_handle,
+            file_contents_buffer,
+        })
+    }
+}
+struct EditorState {
     editor_mode: EditorMode,
     previous_mode: EditorMode,
-    cursor: termux::cursor::Cursor,
-    terminal_attributes: libc::winsize,
 }
-impl EditorData {
+
+impl EditorState {
+    fn new(editor_mode: EditorMode, previous_mode: EditorMode) -> Self {
+        EditorState {
+            editor_mode,
+            previous_mode,
+        }
+    }
     fn update_editor_mode(&mut self, mode: EditorMode) {
         self.previous_mode = self.editor_mode;
         self.editor_mode = mode;
     }
 }
 
-pub fn run() -> Result<(), Box<dyn Error>> {
-    // fills array with 0 once
-    let buffer = [0; 1];
-    let file_contents = GapBuffer::new(Option::None);
-    let editor_mode = EditorMode::Normal;
-    let previous_mode = EditorMode::Normal;
-    let cursor = termux::cursor::Cursor::new();
-    let reader = io::stdin();
-    let terminal_window_attr = termux::get_terminal_size();
+pub fn run(file_data: &mut FileData) -> Result<(), Box<dyn Error>> {
+    let mut editor_state = EditorState::new(EditorMode::Normal, EditorMode::Normal);
 
-    let mut editor_data = EditorData {
-        reader,
-        character_buffer: buffer,
-        file_contents_buffer: file_contents,
-        editor_mode,
-        previous_mode,
-        cursor,
-        terminal_attributes: terminal_window_attr,
-    };
+    let mut terminal_tools = termux::TerminalTools::new();
 
     termux::enable_alternate_buffer()?;
     termux::enable_raw_mode()?;
     termux::clear_screen()?;
 
-    editor_data.cursor.move_home()?;
+    terminal_tools.cursor.move_home()?;
 
-    tui::update_tui(&mut editor_data)?;
+    tui::update_tui(&mut editor_state, &mut terminal_tools)?;
     io::stdout().flush().unwrap();
 
     let mut command = String::new();
     loop {
+        let mut input = [0u8; 1];
         // opening reader gets rid of the shell prompt guy
-        editor_data
-            .reader
-            .read_exact(&mut editor_data.character_buffer)?;
+        io::stdin().read_exact(&mut input)?;
 
-        match editor_data.editor_mode {
-            EditorMode::Normal => normal_mode_handler(&mut editor_data)?,
-            EditorMode::Insert => insert_mode_handler(&mut editor_data)?,
-            EditorMode::Visual => normal_mode_handler(&mut editor_data)?,
-            EditorMode::Command => command_mode_handler(&mut editor_data, &mut command)?,
+        match editor_state.editor_mode {
+            EditorMode::Normal => {
+                normal_mode_handler(&input, &mut editor_state, &mut terminal_tools, file_data)?
+            }
+            EditorMode::Insert => {
+                insert_mode_handler(&input, file_data, &mut terminal_tools, &mut editor_state)?
+            }
+            EditorMode::Visual => {
+                normal_mode_handler(&input, &mut editor_state, &mut terminal_tools, file_data)?
+            }
+            EditorMode::Command => command_mode_handler(
+                &input,
+                &mut editor_state,
+                file_data,
+                &mut terminal_tools,
+                &mut command,
+            )?,
         };
-        tui::update_tui(&mut editor_data)?;
+        tui::update_tui(&mut editor_state, &mut terminal_tools)?;
         io::stdout().flush().unwrap();
     }
 }
 
-fn normal_mode_handler(editor_data: &mut EditorData) -> Result<(), Box<dyn Error>> {
-    match editor_data.character_buffer[0] {
+fn normal_mode_handler(
+    input: &[u8],
+    editor_state: &mut EditorState,
+    terminal_tools: &mut termux::TerminalTools,
+    file_data: &mut FileData,
+) -> Result<(), Box<dyn Error>> {
+    match input[0] {
         b':' => {
-            editor_data.update_editor_mode(EditorMode::Command);
+            editor_state.update_editor_mode(EditorMode::Command);
         }
 
         b'j' => {
-            editor_data.cursor.move_down(1)?;
+            terminal_tools.cursor.move_down(1)?;
             ()
         }
         b'k' => {
-            editor_data.cursor.move_up(1)?;
+            terminal_tools.cursor.move_up(1)?;
             ()
         }
         b'l' => {
-            editor_data.cursor.move_right(1)?;
-            editor_data.file_contents_buffer.move_cursor_right()
+            terminal_tools.cursor.move_right(1)?;
+            file_data.file_contents_buffer.move_cursor_right()
         }
         b'h' => {
-            editor_data.cursor.move_left(1, false)?;
-            editor_data.file_contents_buffer.move_cursor_left()
+            terminal_tools.cursor.move_left(1, false)?;
+            file_data.file_contents_buffer.move_cursor_left()
         }
 
         b'i' => {
-            editor_data.update_editor_mode(EditorMode::Insert);
+            editor_state.update_editor_mode(EditorMode::Insert);
         }
-        b'v' => editor_data.update_editor_mode(EditorMode::Visual),
+        b'v' => editor_state.update_editor_mode(EditorMode::Visual),
         // return/enter
-        13 => {
-            editor_data.cursor.move_down(1)?;
-            ()
-        }
-        // spacebar... may or may not re-add later
-        //32 => {
-        //    editor_data.cursor.move_right(1)?;
-        //    ()
-        //}
+        13 => terminal_tools.cursor.move_down(1)?,
         //backspace
-        127 => {
-            editor_data.cursor.move_left(1, false)?;
-        }
+        127 => terminal_tools.cursor.move_left(1, false)?,
         27 => (),
         _ => (),
     };
@@ -136,14 +160,17 @@ fn normal_mode_handler(editor_data: &mut EditorData) -> Result<(), Box<dyn Error
 }
 /// this function handles the parsing of commands recieved from command mode upon recieving input
 /// of the Enter key.
-fn command_parser(command: &Option<char>) -> Result<(), Box<dyn Error>> {
+fn command_parser(command: &Option<char>, file_data: &mut FileData) -> Result<(), Box<dyn Error>> {
     match command {
         Some(c) => match c {
             'q' => {
                 termux::disable_alternate_buffer()?;
                 process::exit(0);
             }
-            'w' => (),
+            'w' => save_file_contents(
+                file_data.file_name.clone(),
+                file_data.file_contents_buffer.get_content(),
+            ),
             _ => (),
         },
         None => {
@@ -161,17 +188,21 @@ fn command_parser(command: &Option<char>) -> Result<(), Box<dyn Error>> {
 /// function returns Ok with some integer in the case of a valid character. All escape characters
 /// for command mode, including <C-c>
 fn command_mode_handler(
-    editor_data: &mut EditorData,
+    input: &[u8],
+    editor_state: &mut EditorState,
+    file_data: &mut FileData,
+    terminal_tools: &mut termux::TerminalTools,
     command: &mut String,
 ) -> Result<(), Box<dyn Error>> {
-    editor_data.previous_mode = EditorMode::Command;
-    match editor_data.character_buffer[0] {
+    editor_state.previous_mode = EditorMode::Command;
+
+    match input[0] {
         // return/enter key code
         13 => {
             let len = command.len();
             let mut command_chars = command.chars();
             for _ in 0..len {
-                match command_parser(&command_chars.next()) {
+                match command_parser(&command_chars.next(), file_data) {
                     Ok(_) => (),
                     Err(_) => {
                         write!(io::stdout(), "command not found")?;
@@ -179,67 +210,62 @@ fn command_mode_handler(
                     }
                 }
             }
-            editor_data.update_editor_mode(EditorMode::Normal);
+            editor_state.update_editor_mode(EditorMode::Normal);
             String::clear(command);
             return Ok(());
         }
         // backspace key code
         127 => {
             command.pop();
-            editor_data.cursor.backspace(true)?;
+            terminal_tools.cursor.backspace(true)?;
             ()
         }
-        // code for <C-c>
-        3 => {
-            editor_data.update_editor_mode(EditorMode::Normal);
-            editor_data.cursor.restore_cursor_position()?;
-            io::stdout().flush().unwrap();
-        }
-        // ascii code for Esc
-        27 => {
-            editor_data.update_editor_mode(EditorMode::Normal);
-            editor_data.cursor.restore_cursor_position()?;
+        // code for <C-c> | ascii code for Esc
+        3 | 27 => {
+            editor_state.update_editor_mode(EditorMode::Normal);
+            terminal_tools.cursor.restore_cursor_position()?;
             io::stdout().flush().unwrap();
         }
         _ => {
-            command.push(editor_data.character_buffer[0] as char);
-            editor_data
-                .cursor
-                .write_char(&editor_data.character_buffer[0], true)?;
+            command.push(input[0] as char);
+            terminal_tools.cursor.write_char(&input[0], true)?;
         }
     };
     Ok(())
 }
 
-fn insert_mode_handler(editor_data: &mut EditorData) -> Result<(), Box<dyn Error>> {
-    match editor_data.character_buffer[0] {
+fn insert_mode_handler(
+    input: &[u8],
+    file_data: &mut FileData,
+    terminal_tools: &mut termux::TerminalTools,
+    editor_state: &mut EditorState,
+) -> Result<(), Box<dyn Error>> {
+    match input[0] {
         // return/enter
         13 => {
-            editor_data.cursor.move_down(1)?;
+            file_data.file_contents_buffer.insert_left('\n');
+            terminal_tools.cursor.return_newline()?;
         }
         //backspace
         127 => {
-            editor_data.file_contents_buffer.delete_char();
-            editor_data.cursor.backspace(false)?;
-            ()
+            file_data.file_contents_buffer.delete_char();
+            terminal_tools.cursor.backspace(false)?;
         }
-        // <C-c>
-        3 => {
-            editor_data.update_editor_mode(EditorMode::Normal);
-        }
-        // Esc
-        27 => {
-            editor_data.update_editor_mode(EditorMode::Normal);
+        // <C-c> | Esc
+        3 | 27 => {
+            editor_state.update_editor_mode(EditorMode::Normal);
         }
         _ => {
-            editor_data
-                .file_contents_buffer
-                .insert_left(editor_data.character_buffer[0] as char);
+            file_data.file_contents_buffer.insert_left(input[0] as char);
 
-            editor_data
-                .cursor
-                .write_char(&editor_data.character_buffer[0], false)?;
+            terminal_tools.cursor.write_char(&input[0], false)?;
         }
     };
     Ok(())
+}
+
+fn save_file_contents(file_name: String, file_content: String) {
+    let data = file_content;
+
+    fs::write(format!("./{file_name}"), data).expect("should write to /file_name");
 }
