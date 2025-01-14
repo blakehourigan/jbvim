@@ -334,6 +334,17 @@ The parameters for this escape sequence are defined as follows:
 | \+ (keypad)              | 43       | 43         | (0;150)   | (0;55)    |
 | 5 (keypad)               | (0;76)   | 53         | (0;143)   | \--       |
 
+
+#### Modify Cursor Shape
+|ESC Code Sequence|Description |
+| ----------------| ---------- | 
+|ESC[0 q 	      |changes cursor shape to steady block        | 
+|ESC[1 q 	      |changes cursor shape to steady block also|
+|ESC[2 q 	      |changes cursor shape to blinking block|
+|ESC[3 q 	      |changes cursor shape to steady underline|
+|ESC[4 q 	      |changes cursor shape to blinking underline|
+|ESC[5 q 	      |changes cursor shape to steady bar|
+|ESC[6 q 	      |changes cursor shape to blinking bar|
 ## Resources
 
 - [Wikipedia: ANSI escape code](https://en.wikipedia.org/wiki/ANSI_escape_code)
