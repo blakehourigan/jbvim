@@ -1,5 +1,5 @@
 [package]
-name = "termux"
+name = "terminol"
 version = "0.1.0"
 edition = "2021"
 

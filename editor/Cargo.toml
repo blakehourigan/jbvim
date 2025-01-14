@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-termux = { path = "../termux"}
+terminol = { path = "../terminol"}
 gap_buffer = {path = "../gap_buffer"}
+termios = "0.3"
 libc = "0.2"

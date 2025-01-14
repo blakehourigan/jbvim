@@ -3,23 +3,12 @@ pub use cursor::{Colors, Cursor};
 use libc;
 use std::error::Error;
 use std::io::{self, Write};
-use termios::{tcsetattr, Termios, ECHO, ICANON, TCSANOW};
+use termios::{
+    tcsetattr, Termios, BRKINT, CS8, CSIZE, ECHO, ECHONL, ICANON, ICRNL, IEXTEN, IGNBRK, IGNCR,
+    INLCR, ISIG, ISTRIP, IXON, OPOST, PARENB, PARMRK, TCSANOW,
+};
 
-pub struct TerminalTools {
-    pub cursor: Cursor,
-    pub terminal_attributes: libc::winsize,
-}
-
-impl TerminalTools {
-    pub fn new() -> Self {
-        TerminalTools {
-            cursor: Cursor::new(),
-            terminal_attributes: get_terminal_size(),
-        }
-    }
-}
-
-fn get_terminal_size() -> libc::winsize {
+pub fn get_terminal_size() -> libc::winsize {
     let mut terminal_window_attr = libc::winsize {
         ws_row: 0,
         ws_col: 0,
@@ -38,15 +27,28 @@ fn get_terminal_size() -> libc::winsize {
 /// ulilizes termios from libc to enable raw mode in the terminal. this function disables the
 /// icanon and echo flags in the c_lflag register to disable canonical mode and echo terminal
 /// functionality
-pub fn enable_raw_mode() -> Result<(), Box<dyn Error>> {
+pub fn enable_raw_mode() -> Result<Termios, Box<dyn Error>> {
     let mut termios = Termios::from_fd(libc::STDIN_FILENO).unwrap();
-    termios::cfmakeraw(&mut termios);
+    let original_termios = termios.clone();
+    //termios::cfmakeraw(&mut termios);
 
     // disable canonical terminal mode and typing echo to only print chars we want.
     // e.g. ascii in insert mode
+    termios.c_iflag &= !(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+    termios.c_oflag &= !OPOST;
+    termios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
     termios.c_lflag &= !(ICANON | ECHO);
+    termios.c_cflag &= !(CSIZE | PARENB);
+    termios.c_cflag |= CS8;
 
     match tcsetattr(libc::STDIN_FILENO, TCSANOW, &termios) {
+        Ok(_) => (),
+        Err(e) => write!(io::stdout(), "error, {}", e)?,
+    };
+    Ok(original_termios)
+}
+pub fn disable_raw_mode(original_settings: &Termios) -> Result<(), Box<dyn Error>> {
+    match tcsetattr(libc::STDIN_FILENO, TCSANOW, &original_settings) {
         Ok(_) => (),
         Err(e) => write!(io::stdout(), "error, {}", e)?,
     };
