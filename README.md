@@ -4,7 +4,8 @@
 A vim inspired editor written in rust.
 
 ## Features
-- **Modal Editing:** As found in vim, jbvim includes normal, insert, and visual modes. This allows the user
+- **Modal Editing:** As found in vim, jbvim includes normal, insert, and visual modes. This allows the user to easily navigate a document using vim keybinds in normal mode, insert text in insert mode, and highlight, move, or delete sections of text in visual mode.
+- **Gap Buffer:**  
 
 
 ## Software Requirements
