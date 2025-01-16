@@ -1,5 +1,4 @@
 use crate::{EditorMode, EditorState};
-use std::error::Error;
 use std::io::{self, Write};
 use terminol::cursor;
 use terminol::{Colors, Cursor};
@@ -28,88 +27,88 @@ impl InformationBar {
     }
 }
 
-pub fn update_tui(editor_state: &mut EditorState) -> Result<(), Box<dyn Error>> {
+pub fn update_tui(editor_state: &mut EditorState) {
     let window_inf = InformationBar::new(&terminol::get_terminal_size());
     let mode = editor_state.editor_mode.value();
 
-    if editor_state.editor_mode == EditorMode::Command
-        && editor_state.previous_mode == EditorMode::Command
-    {
-        draw_command_field(&window_inf, &mode)?;
-    } else {
-        draw_info_tui(&window_inf)?;
-        draw_mode(&window_inf, &mode)?;
-        update_cursor(editor_state)?;
+    match editor_state.editor_mode {
+        EditorMode::Command => {
+            if editor_state.previous_mode == EditorMode::Command {
+            } else {
+                draw_command_field(&window_inf);
+            }
+        }
+        _ => {
+            if editor_state.previous_mode == EditorMode::Command {
+                cursor::restore_cursor_position();
+                editor_state.previous_mode = editor_state.editor_mode;
+            } else {
+                draw_info_tui(&window_inf);
+                draw_mode(&window_inf, &mode);
+                update_cursor(editor_state);
+            }
+        }
     }
-    Ok(())
 }
 
-fn update_cursor(editor_state: &mut EditorState) -> Result<(), Box<dyn Error>> {
+fn update_cursor(editor_state: &mut EditorState) {
     match editor_state.editor_mode {
-        EditorMode::Insert | EditorMode::Command => cursor::enable_bar_cursor()?,
-        _ => cursor::enable_standard_cursor()?,
+        EditorMode::Insert | EditorMode::Command => cursor::enable_bar_cursor(),
+        _ => cursor::enable_standard_cursor(),
     }
-    Ok(())
 }
 
 /// draws the tui information bar including green background and default cursor position
 /// (1,1)
-fn draw_info_tui(window_inf: &InformationBar) -> Result<(), Box<dyn Error>> {
-    let cursor = Cursor::get_cursor_coords().expect("expecting cursor obj");
-    cursor::save_cursor_position()?;
-    cursor::move_cursor_to(window_inf.row, 1)?;
+fn draw_info_tui(window_inf: &InformationBar) {
+    let cursor = Cursor::get_cursor_coords();
+    cursor::save_cursor_position();
+    cursor::move_cursor_to(window_inf.row, 1);
 
     // editor_data.cursor.mode(cursor::modes::bold);
     let color = Colors::Red as i32;
-    cursor::set_background(color)?;
+    cursor::set_background(color);
 
     let bar = std::iter::repeat(" ")
         .take(window_inf.length as usize)
         .collect::<String>();
 
-    write!(io::stdout(), "{}", bar)?;
+    write!(io::stdout(), "{}", bar).unwrap_or_else(|e| panic!("failed io operation: {e}"));
 
-    draw_cursor_location(&window_inf, color, cursor.line, cursor.col)?;
+    draw_cursor_location(&window_inf, color, cursor.line, cursor.col);
 
-    cursor::restore_cursor_position()?;
-    cursor::reset_modes()?;
-    Ok(())
+    cursor::restore_cursor_position();
+    cursor::reset_modes();
 }
 
-fn draw_cursor_location(
-    window_inf: &InformationBar,
-    color: i32,
-    line: u32,
-    col: u32,
-) -> Result<(), Box<dyn Error>> {
-    cursor::move_cursor_to(window_inf.row, window_inf.cursor_location_col)?;
+fn draw_cursor_location(window_inf: &InformationBar, color: i32, line: u32, col: u32) {
+    cursor::move_cursor_to(window_inf.row, window_inf.cursor_location_col);
 
-    cursor::set_background(color)?;
+    cursor::set_background(color);
 
-    write!(io::stdout(), "({},{})", line, col)?;
-    Ok(())
+    write!(io::stdout(), "({},{})", line, col)
+        .unwrap_or_else(|e| panic!("failed io operation: {e}"));
 }
 
-fn draw_command_field(window_inf: &InformationBar, mode: &str) -> Result<(), Box<dyn Error>> {
+fn draw_command_field(window_inf: &InformationBar) {
     cursor::draw_line(
         window_inf.command_row,
         window_inf.length as usize,
         Colors::Black as i32,
-    )?;
-    //cursor.draw_line(row, length, color)
-    cursor::move_cursor_to(window_inf.command_row, 1)?;
+    );
+    cursor::move_cursor_to(window_inf.command_row, 1);
 
-    write!(io::stdout(), ":")?;
-
-    Ok(())
+    write!(io::stdout(), ":").unwrap_or_else(|e| panic!("failed io operation: {e}"));
 }
 
-fn draw_mode(window_inf: &InformationBar, mode: &str) -> Result<(), Box<dyn Error>> {
-    cursor::save_cursor_position()?;
-    cursor::move_cursor_to(window_inf.command_row, window_inf.editor_mode_col)?;
+fn draw_mode(window_inf: &InformationBar, mode: &str) {
+    cursor::save_cursor_position();
+    cursor::move_cursor_to(window_inf.command_row, window_inf.editor_mode_col);
 
-    write!(io::stdout(), "{}", mode)?;
-    cursor::restore_cursor_position()?;
+    write!(io::stdout(), "{}", mode).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+    cursor::restore_cursor_position();
+}
 
-    Ok(())
+fn update_line() {
+    //cursor::write_char(character);
 }
