@@ -111,16 +111,3 @@ pub fn make_invisible() {
 pub fn make_visible() {
     write!(io::stdout(), "\x1b[28m").unwrap_or_else(|e| panic!("io error{e}"));
 }
-
-pub fn draw_line(line_num: u32, length: usize, color: i32) {
-    save_cursor_position();
-    move_cursor_to(line_num, 1);
-
-    set_background(color);
-
-    let bar = std::iter::repeat(" ").take(length).collect::<String>();
-
-    write!(io::stdout(), "{}", bar).unwrap_or_else(|e| panic!("io error{e}"));
-
-    restore_cursor_position();
-}

@@ -92,7 +92,7 @@ fn draw_cursor_location(window_inf: &InformationBar, color: i32, line: u32, col:
 }
 
 fn draw_command_field(window_inf: &InformationBar) {
-    cursor::draw_line(
+    draw_line(
         window_inf.command_row,
         window_inf.length as usize,
         Colors::Black as i32,
@@ -110,6 +110,18 @@ fn draw_mode(window_inf: &InformationBar, mode: &str) {
     cursor::restore_cursor_position();
 }
 
+fn draw_line(line_num: u32, length: usize, color: i32) {
+    cursor::save_cursor_position();
+    cursor::move_cursor_to(line_num, 1);
+
+    cursor::set_background(color);
+
+    let bar = std::iter::repeat(" ").take(length).collect::<String>();
+
+    write!(io::stdout(), "{}", bar).unwrap_or_else(|e| panic!("io error{e}"));
+
+    cursor::restore_cursor_position();
+}
 pub fn update_line(mut line: String, is_backspace: bool) {
     if is_backspace {
         line.push_str("  ");
