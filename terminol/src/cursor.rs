@@ -36,8 +36,6 @@ impl Cursor {
             .take_while(|c| *c != ';')
             .filter(|i| i.is_numeric())
             .map(|c| c.to_digit(10).expect("not a number!"))
-            .collect::<Vec<_>>()
-            .into_iter()
             .fold(0, |acc, elem| acc * 10 + elem);
 
         let col: u32 = iterator
@@ -45,8 +43,6 @@ impl Cursor {
             .map(|c| c as char)
             .filter(|i| i.is_numeric())
             .map(|c| c.to_digit(10).expect("not a number!"))
-            .collect::<Vec<_>>()
-            .into_iter()
             .fold(0, |acc, elem| acc * 10 + elem);
 
         Cursor::new(line, col)
