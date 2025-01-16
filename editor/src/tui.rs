@@ -1,5 +1,4 @@
 use crate::{EditorMode, EditorState};
-use libc::flock;
 use std::io::{self, Write};
 use terminol::cursor;
 use terminol::{Colors, Cursor};

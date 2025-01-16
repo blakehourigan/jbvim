@@ -5,7 +5,6 @@ pub struct GapBuffer {
     buffer: Vec<char>,
     gap_begin: usize,
     gap_end: usize,
-    content_end: Option<usize>,
 }
 
 impl GapBuffer {
@@ -18,7 +17,6 @@ impl GapBuffer {
                     buffer: vec!['\0'; 200],
                     gap_begin: 0,
                     gap_end: 199,
-                    content_end: Some(contents.len() + 199),
                 };
                 // buffer starts at begin of string, so we add exting content to
                 // the end by default
@@ -29,7 +27,6 @@ impl GapBuffer {
                 buffer: vec!['\0'; 200],
                 gap_begin: 0,
                 gap_end: 199,
-                content_end: None,
             },
         }
     }
@@ -37,10 +34,6 @@ impl GapBuffer {
         if self.gap_begin < self.gap_end {
             self.buffer[self.gap_begin] = char;
             self.gap_begin += 1;
-            self.content_end = match self.content_end {
-                Some(num) => Some(num + 1),
-                None => Some(1),
-            };
         } else {
             self.grow_buffer();
         }
