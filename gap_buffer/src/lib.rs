@@ -48,14 +48,16 @@ impl GapBuffer {
     }
 
     pub fn move_cursor_left(&mut self) {
-        let tmp = self.buffer[self.gap_end];
+        if self.gap_begin != 0 {
+            let tmp = self.buffer[self.gap_end];
 
-        self.buffer[self.gap_end] = self.buffer[self.gap_begin - 1];
+            self.buffer[self.gap_end] = self.buffer[self.gap_begin - 1];
 
-        self.buffer[self.gap_begin - 1] = tmp;
+            self.buffer[self.gap_begin - 1] = tmp;
 
-        self.gap_begin -= 1;
-        self.gap_end -= 1;
+            self.gap_begin -= 1;
+            self.gap_end -= 1;
+        }
     }
 
     pub fn delete_char(&mut self) {
