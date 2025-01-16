@@ -1,4 +1,5 @@
 use crate::{EditorMode, EditorState};
+use libc::flock;
 use std::io::{self, Write};
 use terminol::cursor;
 use terminol::{Colors, Cursor};
@@ -109,6 +110,11 @@ fn draw_mode(window_inf: &InformationBar, mode: &str) {
     cursor::restore_cursor_position();
 }
 
-fn update_line() {
-    //cursor::write_char(character);
+pub fn update_line(mut line: String, is_backspace: bool) {
+    if is_backspace {
+        line.push_str("  ");
+    }
+    cursor::save_cursor_position();
+    write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+    cursor::restore_cursor_position();
 }

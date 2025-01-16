@@ -6,7 +6,7 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Read, Write};
 use std::process;
-use terminol::cursor;
+use terminol::{cursor, Cursor};
 use termios::Termios;
 
 pub fn run(cmd_args: env::Args) -> Result<Termios, Box<dyn Error>> {
@@ -84,9 +84,14 @@ fn normal_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
 
         b'i' => {
             editor_state.update_editor_mode(EditorMode::Insert);
-            cursor::enable_bar_cursor();
         }
         b'v' => editor_state.update_editor_mode(EditorMode::Visual),
+        b'0' => cursor::move_cursor_to(Cursor::get_cursor_coords().line, 1),
+        b'a' => {
+            cursor::move_right(1);
+            file_data.file_contents_buffer.move_cursor_right();
+            editor_state.update_editor_mode(EditorMode::Insert);
+        }
         // return/enter
         13 => cursor::move_down(1),
         //backspace
@@ -132,6 +137,12 @@ fn insert_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
         127 => {
             file_data.file_contents_buffer.delete_char();
             cursor::backspace();
+            // grab from 1 after the gaps end until the next newline or until the eof
+            let line_end = file_data.file_contents_buffer.grab_to_line_end();
+            // tell tui that we need to update the line we're on with the content we just got
+            // after our current position
+            cursor::write_char(&input[0]);
+            tui::update_line(line_end, true);
         }
         // <C-c> | Esc
         3 => {
@@ -163,18 +174,19 @@ fn insert_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
             }
         }
         _ => {
-            //if file_data.file_contents_buffer.is_line_end() {
-            //    file_data.file_contents_buffer.insert_left(input[0] as char);
-            //    cursor::write_char(&input[0]);
-            //} else {
-            //    // insert the char
-            //    file_data.file_contents_buffer.insert_left(input[0] as char);
-            //    // grab from 1 after the gaps end until the next newline or until the eof
-            //    let line_end = file_data.file_contents_buffer.grab_to_line_end();
-            //    // tell tui that we need to update the line we're on with the content we just got
-            //    // after our current position
-            //    tui::update_line();
-            //}
+            if file_data.file_contents_buffer.is_line_end() {
+                file_data.file_contents_buffer.insert_left(input[0] as char);
+                cursor::write_char(&input[0]);
+            } else {
+                // insert the char
+                file_data.file_contents_buffer.insert_left(input[0] as char);
+                // grab from 1 after the gaps end until the next newline or until the eof
+                let line_end = file_data.file_contents_buffer.grab_to_line_end();
+                // tell tui that we need to update the line we're on with the content we just got
+                // after our current position
+                cursor::write_char(&input[0]);
+                tui::update_line(line_end, false);
+            }
         }
     };
 }

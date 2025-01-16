@@ -5,6 +5,7 @@ pub struct GapBuffer {
     buffer: Vec<char>,
     gap_begin: usize,
     gap_end: usize,
+    content_end: Option<usize>,
 }
 
 impl GapBuffer {
@@ -17,7 +18,10 @@ impl GapBuffer {
                     buffer: vec!['\0'; 200],
                     gap_begin: 0,
                     gap_end: 199,
+                    content_end: Some(contents.len() + 199),
                 };
+                // buffer starts at begin of string, so we add exting content to
+                // the end by default
                 gap_buffer.buffer.extend(contents.chars());
                 gap_buffer
             }
@@ -25,6 +29,7 @@ impl GapBuffer {
                 buffer: vec!['\0'; 200],
                 gap_begin: 0,
                 gap_end: 199,
+                content_end: None,
             },
         }
     }
@@ -32,6 +37,10 @@ impl GapBuffer {
         if self.gap_begin < self.gap_end {
             self.buffer[self.gap_begin] = char;
             self.gap_begin += 1;
+            self.content_end = match self.content_end {
+                Some(num) => Some(num + 1),
+                None => Some(1),
+            };
         } else {
             self.grow_buffer();
         }
@@ -63,11 +72,11 @@ impl GapBuffer {
     pub fn delete_char(&mut self) {
         self.gap_begin -= 1;
     }
-    // this is completely wrong as of now
 
-    fn remaining_capacity(&self) -> usize {
-        self.buffer.capacity() - self.gap_end
-    }
+    // this is completely wrong as of now
+    //fn remaining_capacity(&self) -> usize {
+    //    self.buffer.capacity() - self.gap_end
+    //}
 
     fn grow_buffer(&mut self) {
         //self.buffer.resize(self.buffer.capacity() + GROW_SIZE, '\0');
@@ -82,6 +91,19 @@ impl GapBuffer {
         drop(self.buffer.drain(self.gap_begin..=self.gap_end));
 
         self.buffer.iter().collect()
+    }
+    pub fn is_line_end(&self) -> bool {
+        if self.buffer[self.gap_end + 1] == '\n' {
+            return true;
+        }
+        false
+    }
+    /// takes a reference to the gap buffer and returns
+    /// a string containing the contents of the current line until either
+    /// the newline character '\n' or eof is reached, whichever comes first.
+    pub fn grab_to_line_end(&self) -> String {
+        let v = &self.buffer[self.gap_end + 1..];
+        v.iter().take_while(|c| **c != '\n').collect()
     }
 }
 

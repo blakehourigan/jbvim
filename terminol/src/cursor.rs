@@ -105,6 +105,12 @@ pub fn delete_end_of_line() {
 pub fn reset_modes() {
     write!(io::stdout(), "\x1b[0m").unwrap_or_else(|e| panic!("io error{e}"));
 }
+pub fn make_invisible() {
+    write!(io::stdout(), "\x1b[?25h").unwrap_or_else(|e| panic!("io error{e}"));
+}
+pub fn make_visible() {
+    write!(io::stdout(), "\x1b[28m").unwrap_or_else(|e| panic!("io error{e}"));
+}
 
 pub fn draw_line(line_num: u32, length: usize, color: i32) {
     save_cursor_position();
