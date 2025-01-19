@@ -1,12 +1,26 @@
+use core::fmt;
+
 const GROW_SIZE: usize = 200;
 
-#[derive(Debug)]
 pub struct GapBuffer {
     buffer: Vec<char>,
     gap_begin: usize,
     gap_end: usize,
 }
 
+impl fmt::Debug for GapBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buffer = String::new();
+        for c in &self.buffer {
+            buffer.push(*c);
+        }
+        f.debug_struct("GapBuffer")
+            .field("buf", &buffer)
+            .field("begin", &self.gap_begin)
+            .field("end", &self.gap_end)
+            .finish()
+    }
+}
 impl GapBuffer {
     pub fn new(content: Option<String>) -> GapBuffer {
         match content {
@@ -39,14 +53,19 @@ impl GapBuffer {
         }
     }
     pub fn move_cursor_right(&mut self) {
-        let tmp = self.buffer[self.gap_begin];
+        match self.buffer.get(self.gap_end + 1) {
+            Some(_) => {
+                let tmp = self.buffer[self.gap_begin];
 
-        self.buffer[self.gap_begin] = self.buffer[self.gap_end + 1];
+                self.buffer[self.gap_begin] = self.buffer[self.gap_end + 1];
 
-        self.buffer[self.gap_end] = tmp;
+                self.buffer[self.gap_end] = tmp;
 
-        self.gap_begin += 1;
-        self.gap_end += 1;
+                self.gap_begin += 1;
+                self.gap_end += 1;
+            }
+            None => self.gap_begin += 1,
+        }
     }
 
     pub fn move_cursor_left(&mut self) {
@@ -112,44 +131,87 @@ impl GapBuffer {
     ) -> Option<(usize, usize)> {
         match movement {
             "down" => {
-                //the amount of right moves we take in buffer is length
-                let s: String = self.buffer.drain(self.gap_end + 1..).collect();
-                let mut iter = s.chars();
+                let cursor_end = self.gap_end + 1;
+                let mut v = self.buffer[cursor_end..].iter();
 
-                let _ = iter
-                    .by_ref()
-                    .take_while(|c| *c != '\n')
-                    .for_each(|_x| self.move_cursor_right());
-                match iter.next() {
-                    None => return None,
-                    _ => (),
-                }
+                let first_index = v.by_ref().position(|i| *i == '\n');
+                let second_index = v.by_ref().position(|i| *i == '\n');
 
-                let mut new_col = 0;
-                for i in 1..=curr_col {
-                    new_col = i;
-                    let value = iter.by_ref().next();
-                    match value {
-                        Some(_) => (),
-                        None => return None,
+                let next_line = &self.buffer
+                    [cursor_end + first_index? + 1..=cursor_end + first_index? + second_index?];
+
+                let mut new_col = curr_col;
+
+                for i in (0..=curr_col).rev() {
+                    if i == 0 {
+                        return None;
+                    }
+
+                    // curr col is 1 based indexed, need to subtract that off for accuracy
+                    match next_line.get(i - 1) {
+                        Some(_) => {
+                            new_col = i;
+                            break;
+                        }
+                        None => (),
                     }
                 }
-
+                // move the cursor past the newline that we found, then to the new column - 1
+                // because the terminal cursor is 1 based
+                let movement_right = (first_index? + 1) + (new_col - 1);
+                for _ in 0..movement_right {
+                    self.move_cursor_right();
+                }
                 return Some((curr_line + 1, new_col));
             }
-            "up" => None,
-            "left" => match self.buffer.get((self.gap_begin as i32 - 1) as usize) {
+            "up" => {
+                if curr_line == 1 {
+                    return None;
+                }
+                let cursor_begin = self.gap_begin;
+                let mut v = self.buffer[..cursor_begin].iter().rev();
+
+                let end_line = v.by_ref().position(|i| *i == '\n');
+                let start_line: Vec<_> = v.by_ref().take_while(|i| **i != '\n').collect();
+                let start_line = start_line.len();
+
+                let prev_line = &self.buffer
+                    [cursor_begin - (start_line + end_line?)..=(cursor_begin - end_line?) - 1];
+
+                let mut new_col = curr_col;
+
+                for i in (0..=curr_col).rev() {
+                    if i == 0 {
+                        return None;
+                    }
+
+                    // curr col is 1 based indexed, need to subtract that off for accuracy
+                    match prev_line.get(i - 1) {
+                        Some(_) => {
+                            new_col = i;
+                            break;
+                        }
+                        None => (),
+                    }
+                }
+                // move the cursor past the newline that we found, then to the new column - 1
+                // because the terminal cursor is 1 based
+                let movement_left = (start_line + end_line? + 1) - (new_col - 1);
+                for _ in 0..movement_left {
+                    self.move_cursor_left();
+                }
+                return Some((curr_line - 1, new_col));
+            }
+            "left" => match self.buffer.get(self.gap_begin - 1) {
                 Some(_) => {
                     self.move_cursor_left();
                     return Some((curr_line, curr_col - 1));
                 }
                 None => return None,
             },
-            "right" => match self.buffer.get(self.gap_end + 1) {
+            "right" => match self.buffer.get(self.gap_end + 2) {
                 Some(c) => {
                     if *c == '\n' {
-                        return None;
-                    } else if *c == '\r' {
                         return None;
                     } else {
                         self.move_cursor_right();

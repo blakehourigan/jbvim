@@ -13,6 +13,7 @@ pub fn run(cmd_args: env::Args) -> Result<Termios, Box<dyn Error>> {
     let mut editor_state = EditorState::new(EditorMode::Normal, EditorMode::Normal);
     let original_settings = terminol::enable_raw_mode();
 
+    cursor::move_home();
     cursor::save_cursor_position();
     terminol::enable_alternate_buffer();
     terminol::clear_screen();
