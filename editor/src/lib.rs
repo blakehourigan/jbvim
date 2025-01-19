@@ -2,10 +2,10 @@ pub mod config;
 mod tui;
 pub use config::FileData;
 use config::{EditorMode, EditorState};
-use std::env;
 use std::error::Error;
 use std::io::{self, Read, Write};
 use std::process;
+use std::{env, usize};
 use terminol::{cursor, Cursor};
 use termios::Termios;
 
@@ -66,22 +66,9 @@ fn normal_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
         b':' => {
             editor_state.update_editor_mode(EditorMode::Command);
         }
-
-        b'j' => {
-            cursor::move_down(1);
+        b'j' | b'k' | b'l' | b'h' => {
+            basic_movement_handler(input, file_data, editor_state);
         }
-        b'k' => {
-            cursor::move_up(1);
-        }
-        b'l' => {
-            cursor::move_right(1);
-            file_data.file_contents_buffer.move_cursor_right()
-        }
-        b'h' => {
-            cursor::move_left(1);
-            file_data.file_contents_buffer.move_cursor_left()
-        }
-
         b'i' => {
             editor_state.update_editor_mode(EditorMode::Insert);
         }
@@ -96,41 +83,17 @@ fn normal_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
         13 => cursor::move_down(1),
         //backspace
         127 => cursor::move_left(1),
-        27 => {
-            let num = input[0] + input[1] + input[2];
-            match num {
-                27 => editor_state.update_editor_mode(EditorMode::Normal),
-                // up arrow key
-                183 => {
-                    cursor::move_up(1);
-                }
-                // down arrow key
-                184 => {
-                    cursor::move_down(1);
-                }
-                // right arrow key
-                185 => {
-                    cursor::move_right(1);
-                    file_data.file_contents_buffer.move_cursor_right();
-                }
-                // left arrow key
-                186 => {
-                    cursor::move_left(1);
-                    file_data.file_contents_buffer.move_cursor_left();
-                }
-                _ => (),
-            }
-        }
+        27 => basic_movement_handler(&input, file_data, editor_state),
         _ => (),
-    };
+    }
 }
 
 fn insert_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: &mut FileData) {
     match input[0] {
         // return/enter
         13 => {
-            file_data.file_contents_buffer.insert_left('\r');
             file_data.file_contents_buffer.insert_left('\n');
+            file_data.file_contents_buffer.insert_left('\r');
             cursor::return_newline();
         }
         //backspace
@@ -148,31 +111,7 @@ fn insert_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
         3 => {
             editor_state.update_editor_mode(EditorMode::Normal);
         }
-        27 => {
-            let num = input[0] + input[1] + input[2];
-            match num {
-                27 => editor_state.update_editor_mode(EditorMode::Normal),
-                // up arrow key
-                183 => {
-                    cursor::move_up(1);
-                }
-                // down arrow key
-                184 => {
-                    cursor::move_down(1);
-                }
-                // right arrow key
-                185 => {
-                    cursor::move_right(1);
-                    file_data.file_contents_buffer.move_cursor_right();
-                }
-                // left arrow key
-                186 => {
-                    cursor::move_left(1);
-                    file_data.file_contents_buffer.move_cursor_left();
-                }
-                _ => (),
-            }
-        }
+        27 => basic_movement_handler(input, file_data, editor_state),
         _ => {
             if file_data.file_contents_buffer.is_line_end() {
                 file_data.file_contents_buffer.insert_left(input[0] as char);
@@ -191,6 +130,74 @@ fn insert_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
     };
 }
 
+fn basic_movement_handler(input: &[u8], file_data: &mut FileData, editor_state: &mut EditorState) {
+    let num = input[0] + input[1] + input[2];
+    match num {
+        // escape key handler
+        27 => editor_state.update_editor_mode(EditorMode::Normal),
+        // up arrow or k key
+        183 | b'k' => {
+            let cursor_coords = Cursor::get_cursor_coords();
+            let curr_line = cursor_coords.line as usize;
+            let curr_col = cursor_coords.col as usize;
+            let pair = file_data
+                .file_contents_buffer
+                .find_valid_move("up", curr_line, curr_col);
+            match pair {
+                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
+                None => (),
+            }
+            // if not line 1 locate data where my cursor now is in the
+            // data structure
+        }
+        // down arrow or j key
+        184 | b'j' => {
+            let cursor_coords = Cursor::get_cursor_coords();
+            let curr_line = cursor_coords.line as usize;
+            let curr_col = cursor_coords.col as usize;
+            let pair = file_data
+                .file_contents_buffer
+                .find_valid_move("down", curr_line, curr_col);
+            match pair {
+                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
+                None => (),
+            }
+            // get width of the screen
+            // get what column i am in
+            //
+            //
+            // if not last line locate data where my cursor now is in the
+            // data structure
+        }
+        // right arrow or l key
+        185 | b'l' => {
+            let cursor_coords = Cursor::get_cursor_coords();
+            let curr_line = cursor_coords.line as usize;
+            let curr_col = cursor_coords.col as usize;
+            let pair = file_data
+                .file_contents_buffer
+                .find_valid_move("right", curr_line, curr_col);
+            match pair {
+                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
+                None => (),
+            }
+        }
+        // left arrow or h key
+        186 | b'h' => {
+            let cursor_coords = Cursor::get_cursor_coords();
+            let curr_line = cursor_coords.line as usize;
+            let curr_col = cursor_coords.col as usize;
+            let pair = file_data
+                .file_contents_buffer
+                .find_valid_move("left", curr_line, curr_col);
+            match pair {
+                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
+                None => (),
+            }
+        }
+        _ => (),
+    }
+}
 /// handles input given once user has entered 'command' mode. This mode is entered from normal mode
 /// by entering a colon ':' key. Once in this mode the user can enter q to quit the editor or w
 /// to write the current file. Entering 'wq' writes the current file before exiting the program.

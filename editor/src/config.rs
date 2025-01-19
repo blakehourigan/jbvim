@@ -1,6 +1,6 @@
+use crate::tui;
 use gap_buffer::GapBuffer;
 use std::fs;
-use std::io::{self, Write};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum EditorMode {
@@ -45,10 +45,7 @@ impl FileData {
         // at least collect it so that it is easy to do so later.
         file_handle = fs::File::open(&file_name).unwrap();
         file_contents = fs::read_to_string(&file_name).unwrap();
-        match write!(io::stdout(), "{}", file_contents) {
-            Ok(_) => (),
-            Err(_) => return Err("problem writing the file' contents to the editor"),
-        }
+        tui::write_existing_file(&file_contents);
         //}
         let file_contents_buffer = GapBuffer::new(Some(file_contents));
 

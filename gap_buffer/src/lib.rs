@@ -1,4 +1,4 @@
-const GROW_SIZE: usize = 50;
+const GROW_SIZE: usize = 200;
 
 #[derive(Debug)]
 pub struct GapBuffer {
@@ -72,24 +72,30 @@ impl GapBuffer {
     //}
 
     fn grow_buffer(&mut self) {
-        //self.buffer.resize(self.buffer.capacity() + GROW_SIZE, '\0');
         let new_items = std::iter::repeat('\0')
             .take(GROW_SIZE)
             .collect::<Vec<char>>();
-        self.buffer
-            .splice(self.gap_end..self.gap_end, new_items.iter().cloned());
+        self.buffer.splice(self.gap_end..self.gap_end, new_items);
         self.gap_end += GROW_SIZE;
     }
+
     pub fn get_content(&mut self) -> String {
         drop(self.buffer.drain(self.gap_begin..=self.gap_end));
 
         self.buffer.iter().collect()
     }
+
     pub fn is_line_end(&self) -> bool {
-        if self.buffer[self.gap_end + 1] == '\n' {
-            return true;
+        match self.buffer.get(self.gap_end + 1) {
+            Some(c) => {
+                if *c == '\n' {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            None => return true,
         }
-        false
     }
     /// takes a reference to the gap buffer and returns
     /// a string containing the contents of the current line until either
@@ -98,62 +104,123 @@ impl GapBuffer {
         let v = &self.buffer[self.gap_end + 1..];
         v.iter().take_while(|c| **c != '\n').collect()
     }
+    pub fn find_valid_move(
+        &mut self,
+        movement: &str,
+        curr_line: usize,
+        curr_col: usize,
+    ) -> Option<(usize, usize)> {
+        match movement {
+            "down" => {
+                //the amount of right moves we take in buffer is length
+                let s: String = self.buffer.drain(self.gap_end + 1..).collect();
+                let mut iter = s.chars();
+
+                let _ = iter
+                    .by_ref()
+                    .take_while(|c| *c != '\n')
+                    .for_each(|_x| self.move_cursor_right());
+                match iter.next() {
+                    None => return None,
+                    _ => (),
+                }
+
+                let mut new_col = 0;
+                for i in 1..=curr_col {
+                    new_col = i;
+                    let value = iter.by_ref().next();
+                    match value {
+                        Some(_) => (),
+                        None => return None,
+                    }
+                }
+
+                return Some((curr_line + 1, new_col));
+            }
+            "up" => None,
+            "left" => match self.buffer.get((self.gap_begin as i32 - 1) as usize) {
+                Some(_) => {
+                    self.move_cursor_left();
+                    return Some((curr_line, curr_col - 1));
+                }
+                None => return None,
+            },
+            "right" => match self.buffer.get(self.gap_end + 1) {
+                Some(c) => {
+                    if *c == '\n' {
+                        return None;
+                    } else if *c == '\r' {
+                        return None;
+                    } else {
+                        self.move_cursor_right();
+                        return Some((curr_line, curr_col + 1));
+                    }
+                }
+                None => return None,
+            },
+
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Read;
 
     #[test]
     fn insert_func() {
         let mut buffer = GapBuffer::new(Option::None);
-        buffer.insert_left('t');
-        buffer.insert_left('h');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        buffer.insert_left(' ');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
+        let string = "this is";
+
+        for c in string.chars() {
+            buffer.insert_left(c);
+        }
         assert_eq!(buffer.get_content(), String::from("this is"));
     }
 
     #[test]
     fn delete_func() {
         let mut buffer = GapBuffer::new(Option::None);
+        let string = "chis is";
         buffer.grow_buffer();
+
         buffer.insert_left('t');
         buffer.delete_char();
-        buffer.insert_left('c');
-        buffer.insert_left('h');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        buffer.insert_left(' ');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
+
+        for c in string.chars() {
+            buffer.insert_left(c);
+        }
+
         assert_eq!(buffer.get_content(), String::from("chis is"));
     }
 
     #[test]
     fn move_cursor_left_func() {
         let mut buffer = GapBuffer::new(Option::None);
+        let string1 = "chis is";
+        let string2 = "em";
+
         buffer.grow_buffer();
+
         buffer.insert_left('t');
         buffer.delete_char();
-        buffer.insert_left('c');
-        buffer.insert_left('h');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        buffer.insert_left(' ');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        dbg!(&buffer.buffer);
-        buffer.move_cursor_left();
-        buffer.move_cursor_left();
-        buffer.move_cursor_left();
+
+        for c in string1.chars() {
+            buffer.insert_left(c);
+        }
+
+        for _ in 0..3 {
+            buffer.move_cursor_left();
+        }
         buffer.delete_char();
         buffer.delete_char();
-        buffer.insert_left('e');
-        buffer.insert_left('m');
+
+        for c in string2.chars() {
+            buffer.insert_left(c);
+        }
         dbg!(&buffer.buffer);
         assert_eq!(buffer.get_content(), String::from("chem is"));
     }
@@ -161,26 +228,31 @@ mod tests {
     #[test]
     fn move_cursor_right_func() {
         let mut buffer = GapBuffer::new(Option::None);
+        let string1 = "chis is";
+        let string2 = "em";
+
         buffer.insert_left('t');
         buffer.delete_char();
-        buffer.insert_left('c');
-        buffer.insert_left('h');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        buffer.insert_left(' ');
-        buffer.insert_left('i');
-        buffer.insert_left('s');
-        buffer.move_cursor_left();
-        buffer.move_cursor_left();
-        buffer.move_cursor_left();
+
+        for c in string1.chars() {
+            buffer.insert_left(c);
+        }
+
+        for _ in 0..3 {
+            buffer.move_cursor_left();
+        }
+
         buffer.delete_char();
         buffer.delete_char();
-        buffer.insert_left('e');
-        buffer.insert_left('m');
+
+        for c in string2.chars() {
+            buffer.insert_left(c);
+        }
         dbg!(&buffer.buffer);
-        buffer.move_cursor_right();
-        buffer.move_cursor_right();
-        buffer.move_cursor_right();
+
+        for _ in 0..3 {
+            buffer.move_cursor_right();
+        }
         buffer.insert_left('.');
         dbg!(&buffer.buffer);
 
@@ -202,20 +274,19 @@ mod tests {
     fn file_editing() {
         let mut file = File::open("text.txt").expect("should open text.txt");
         let mut contents = String::new();
+        let string1 = "hello!\n";
+
         file.read_to_string(&mut contents)
             .expect("should read text.txt");
 
         let mut buffer = GapBuffer::new(Some(contents.clone()));
-        buffer.insert_left('h');
-        buffer.insert_left('e');
-        buffer.insert_left('l');
-        buffer.insert_left('l');
-        buffer.insert_left('o');
-        buffer.insert_left('!');
-        buffer.insert_left('\n');
+        for c in string1.chars() {
+            buffer.insert_left(c);
+        }
 
         let mut cmp_file =
             File::open("modified_text.txt").expect("should open file to compare against");
+
         let mut cmp_content = String::new();
         cmp_file
             .read_to_string(&mut cmp_content)
@@ -235,10 +306,9 @@ mod tests {
         for _ in 0..205 {
             buffer.insert_left('h');
         }
-        for _ in 0..55 {
+        for _ in 0..54 {
             buffer.insert_left('b');
         }
-        dbg!(&buffer);
 
         let mut cmp_file =
             File::open("modified_text2.txt").expect("should open file to compare against");
@@ -248,5 +318,20 @@ mod tests {
             .expect("should read cmp file to string");
 
         assert_eq!(buffer.get_content(), cmp_content);
+    }
+    #[test]
+    fn is_valid_test() {
+        let mut buffer = GapBuffer::new(Option::None);
+        let string1 = "this is\n      ss";
+
+        for c in string1.chars() {
+            buffer.insert_left(c);
+        }
+        for _ in 0..11 {
+            buffer.move_cursor_left();
+        }
+
+        let result = buffer.find_valid_move("down", 1);
+        assert_eq!(result, Some(1));
     }
 }

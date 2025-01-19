@@ -129,3 +129,12 @@ pub fn update_line(mut line: String, is_backspace: bool) {
     write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
     cursor::restore_cursor_position();
 }
+pub fn write_existing_file(file_contents: &String) {
+    for c in file_contents.chars() {
+        if c == '\n' {
+            write!(io::stdout(), "\r\n").unwrap_or_else(|e| panic!("failed io operation: {e}"));
+        } else {
+            write!(io::stdout(), "{}", c).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+        }
+    }
+}
