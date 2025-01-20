@@ -123,6 +123,10 @@ impl GapBuffer {
         let v = &self.buffer[self.gap_end + 1..];
         v.iter().take_while(|c| **c != '\n').collect()
     }
+    /// takes a reference to self, movement selection, current line, current col, and decides
+    /// whether the desires move is valid based on the current structure of the GapBuffer.
+    /// Returns a Option<(usize, usize)>. This value is None if the move is invalid, or the tuple
+    /// is returned in the form of (new_line, new_column).
     pub fn find_valid_move(
         &mut self,
         movement: &str,

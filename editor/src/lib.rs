@@ -1,6 +1,6 @@
 pub mod config;
-mod tui;
 pub use config::FileData;
+mod tui;
 use config::{EditorMode, EditorState};
 use std::error::Error;
 use std::io::{self, Read, Write};
