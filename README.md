@@ -23,7 +23,10 @@ git clone https://github.com/blakehourigan/jbvim.git
 ```
 2. **Ensure that the Rust environment and supporting tools are installed on your machine**
    - It is critical that cargo is installed to ensure that dependencies of the program will be installed at the proper version. Ensure that you have the latest tools installed by visiting Rust's [getting started](https://www.rust-lang.org/learn/get-started) page. The current Rust verion at the time of writing is version 1.84.
-3. ** CD into the cloned directory and run the program by executing
+3. ** CD into the cloned directory and run the program by executing**
+```sh 
+cd /dir-you-cloned-to
+```
 ```sh 
 cargo run
 ```
