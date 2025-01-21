@@ -10,7 +10,7 @@ A vim inspired editor written in rust.
 
 ## Software Requirements
 
-- The final version of this software was written and tested only using Arch Linux, the Alacritty terminal environment, and the fish shell. Other software may not play nicely with the **terminol** crate that I developed to interact with the terminal's standard output. 
+- The final version of this software was written and tested only using Arch Linux, the [Alacritty](https://wiki.archlinux.org/title/Alacritty) terminal environment, and the [fish shell](https://fishshell.com/blog/fish-4b/) (v4.0b1). Other software may not play nicely with the **terminol** crate that I developed to interact with the terminal's standard output. 
 
 
 ## Installation
