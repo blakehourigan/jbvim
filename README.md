@@ -10,15 +10,20 @@ A vim inspired editor written in rust.
 
 ## Software Requirements
 
-- 
+- The final version of this software was written and tested only using Arch Linux, the Alacritty terminal environment, and the fish shell. Other software may not play nicely with the **terminol** crate that I developed to interact with the terminal's standard output. 
 
 
 ## Installation
+As of this moment, none of these crates have been published to crates.io. This may happen at a later date for supporting crates such as **terminol**. As such, one can install and run this program by following these steps:
 
-To install and run this project, follow these steps:
-
-1. **step**
+1. **Clone this repository to a local directory on your linux machine**
    - step
+2. **Ensure that the Rust environment and supporting tools are installed on your machine**
+   - It is critical that cargo is installed to ensure that dependencies of the program will be installed at the proper version. Ensure that you have the latest tools installed by visiting Rust's [getting started](https://www.rust-lang.org/learn/get-started) page. The current Rust verion at the time of writing is version 1.84.
+3. ** CD into the cloned directory and run the program by executing
+```sh 
+cargo run
+```
 
 
 
