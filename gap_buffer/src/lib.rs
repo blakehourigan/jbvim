@@ -1,7 +1,8 @@
 use core::fmt;
 
 const GROW_SIZE: usize = 200;
-
+// cursor highlights character 1 AFTER the gaps end
+const CURSOR_OFFSET: usize = 1;
 pub struct GapBuffer {
     buffer: Vec<char>,
     gap_begin: usize,
@@ -23,26 +24,18 @@ impl fmt::Debug for GapBuffer {
 }
 impl GapBuffer {
     pub fn new(content: Option<String>) -> GapBuffer {
-        match content {
-            Some(string) => {
-                let contents = string;
+        let mut gap_buffer = GapBuffer {
+            buffer: vec!['\0'; 200],
+            gap_begin: 0,
+            gap_end: 199,
+        };
 
-                let mut gap_buffer = GapBuffer {
-                    buffer: vec!['\0'; 200],
-                    gap_begin: 0,
-                    gap_end: 199,
-                };
-                // buffer starts at begin of string, so we add exting content to
-                // the end by default
-                gap_buffer.buffer.extend(contents.chars());
-                gap_buffer
-            }
-            None => GapBuffer {
-                buffer: vec!['\0'; 200],
-                gap_begin: 0,
-                gap_end: 199,
-            },
-        }
+        if let Some(string) = content {
+            let contents = string;
+            gap_buffer.buffer.extend(contents.chars());
+        };
+
+        gap_buffer
     }
     pub fn insert_left(&mut self, char: char) {
         if self.gap_begin < self.gap_end {
@@ -54,41 +47,40 @@ impl GapBuffer {
     }
     pub fn move_cursor_right(&mut self) {
         match self.buffer.get(self.gap_end + 1) {
-            Some(_) => {
+            Some(c) => {
                 let tmp = self.buffer[self.gap_begin];
 
-                self.buffer[self.gap_begin] = self.buffer[self.gap_end + 1];
+                self.buffer[self.gap_begin] = *c;
 
-                self.buffer[self.gap_end] = tmp;
+                self.buffer[self.gap_end + 1] = tmp;
 
                 self.gap_begin += 1;
                 self.gap_end += 1;
             }
-            None => self.gap_begin += 1,
+            None => panic!("this should be caught by fn is_end_line"),
         }
     }
 
     pub fn move_cursor_left(&mut self) {
-        if self.gap_begin != 0 {
-            let tmp = self.buffer[self.gap_end];
-
-            self.buffer[self.gap_end] = self.buffer[self.gap_begin - 1];
-
-            self.buffer[self.gap_begin - 1] = tmp;
-
-            self.gap_begin -= 1;
-            self.gap_end -= 1;
+        if self.gap_begin < 1 {
+            return;
         }
+        let tmp = self.buffer[self.gap_end];
+
+        self.buffer[self.gap_end] = match self.buffer.get(self.gap_begin - 1) {
+            Some(c) => *c,
+            None => panic!("should be a char there, that's a problem!"),
+        };
+
+        self.buffer[self.gap_begin - 1] = tmp;
+
+        self.gap_begin -= 1;
+        self.gap_end -= 1;
     }
 
     pub fn delete_char(&mut self) {
         self.gap_begin -= 1;
     }
-
-    // this is completely wrong as of now
-    //fn remaining_capacity(&self) -> usize {
-    //    self.buffer.capacity() - self.gap_end
-    //}
 
     fn grow_buffer(&mut self) {
         let new_items = std::iter::repeat('\0')
@@ -104,8 +96,11 @@ impl GapBuffer {
         self.buffer.iter().collect()
     }
 
-    pub fn is_line_end(&self) -> bool {
-        match self.buffer.get(self.gap_end + 1) {
+    pub fn is_line_beginning(&self) -> bool {
+        if self.gap_begin < 1 {
+            return true;
+        };
+        match self.buffer.get(self.gap_begin - 1) {
             Some(c) => {
                 if *c == '\n' {
                     return true;
@@ -116,9 +111,31 @@ impl GapBuffer {
             None => return true,
         }
     }
+    pub fn is_line_end(&self) -> bool {
+        match self.buffer.get(self.gap_end + CURSOR_OFFSET + 1) {
+            Some(c) => {
+                if *c == '\n' {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            None => return true,
+        }
+    }
+    pub fn get_before_after_buffer(&self) {
+        if self.gap_begin > 0 {
+            print!(
+                "before{:?}, after{:?}",
+                self.buffer.get(self.gap_begin - 1),
+                self.buffer.get(self.gap_end + 1)
+            );
+        }
+    }
     /// takes a reference to the gap buffer and returns
     /// a string containing the contents of the current line until either
     /// the newline character '\n' or eof is reached, whichever comes first.
+
     pub fn grab_to_line_end(&self) -> String {
         let v = &self.buffer[self.gap_end + 1..];
         v.iter().take_while(|c| **c != '\n').collect()
@@ -127,6 +144,7 @@ impl GapBuffer {
     /// whether the desires move is valid based on the current structure of the GapBuffer.
     /// Returns a Option<(usize, usize)>. This value is None if the move is invalid, or the tuple
     /// is returned in the form of (new_line, new_column).
+
     pub fn find_valid_move(
         &mut self,
         movement: &str,
@@ -206,25 +224,6 @@ impl GapBuffer {
                 }
                 return Some((curr_line - 1, new_col));
             }
-            "left" => match self.buffer.get(self.gap_begin - 1) {
-                Some(_) => {
-                    self.move_cursor_left();
-                    return Some((curr_line, curr_col - 1));
-                }
-                None => return None,
-            },
-            "right" => match self.buffer.get(self.gap_end + 2) {
-                Some(c) => {
-                    if *c == '\n' {
-                        return None;
-                    } else {
-                        self.move_cursor_right();
-                        return Some((curr_line, curr_col + 1));
-                    }
-                }
-                None => return None,
-            },
-
             _ => None,
         }
     }
@@ -320,7 +319,6 @@ mod tests {
             buffer.move_cursor_right();
         }
         buffer.insert_left('.');
-        dbg!(&buffer.buffer);
 
         assert_eq!(buffer.get_content(), String::from("chem is."));
     }
@@ -384,20 +382,5 @@ mod tests {
             .expect("should read cmp file to string");
 
         assert_eq!(buffer.get_content(), cmp_content);
-    }
-    #[test]
-    fn is_valid_test() {
-        let mut buffer = GapBuffer::new(Option::None);
-        let string1 = "this is\n      ss";
-
-        for c in string1.chars() {
-            buffer.insert_left(c);
-        }
-        for _ in 0..11 {
-            buffer.move_cursor_left();
-        }
-
-        let result = buffer.find_valid_move("down", 1);
-        assert_eq!(result, Some(1));
     }
 }

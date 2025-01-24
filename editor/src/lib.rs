@@ -2,10 +2,10 @@ pub mod config;
 pub use config::FileData;
 mod tui;
 use config::{EditorMode, EditorState};
+use std::env;
 use std::error::Error;
 use std::io::{self, Read, Write};
 use std::process;
-use std::{env, usize};
 use terminol::{cursor, Cursor};
 use termios::Termios;
 
@@ -74,12 +74,24 @@ fn normal_mode_handler(input: &[u8], editor_state: &mut EditorState, file_data: 
             editor_state.update_editor_mode(EditorMode::Insert);
         }
         b'v' => editor_state.update_editor_mode(EditorMode::Visual),
-        b'0' => cursor::move_cursor_to(Cursor::get_cursor_coords().line, 1),
         b'a' => {
             cursor::move_right(1);
             file_data.file_contents_buffer.move_cursor_right();
             editor_state.update_editor_mode(EditorMode::Insert);
         }
+        b'0' => {
+            while !file_data.file_contents_buffer.is_line_beginning() {
+                cursor::move_left(1);
+                file_data.file_contents_buffer.move_cursor_left();
+            }
+        }
+        b'$' => {
+            while !file_data.file_contents_buffer.is_line_end() {
+                file_data.file_contents_buffer.move_cursor_right();
+                cursor::move_right(1);
+            }
+        }
+
         // return/enter
         13 => cursor::move_down(1),
         //backspace
@@ -163,37 +175,19 @@ fn basic_movement_handler(input: &[u8], file_data: &mut FileData, editor_state: 
                 Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
                 None => (),
             }
-            // get width of the screen
-            // get what column i am in
-            //
-            //
-            // if not last line locate data where my cursor now is in the
-            // data structure
         }
         // right arrow or l key
         185 | b'l' => {
-            let cursor_coords = Cursor::get_cursor_coords();
-            let curr_line = cursor_coords.line as usize;
-            let curr_col = cursor_coords.col as usize;
-            let pair = file_data
-                .file_contents_buffer
-                .find_valid_move("right", curr_line, curr_col);
-            match pair {
-                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
-                None => (),
+            if !file_data.file_contents_buffer.is_line_end() {
+                file_data.file_contents_buffer.move_cursor_right();
+                cursor::move_right(1);
             }
         }
         // left arrow or h key
         186 | b'h' => {
-            let cursor_coords = Cursor::get_cursor_coords();
-            let curr_line = cursor_coords.line as usize;
-            let curr_col = cursor_coords.col as usize;
-            let pair = file_data
-                .file_contents_buffer
-                .find_valid_move("left", curr_line, curr_col);
-            match pair {
-                Some(pair) => cursor::move_cursor_to(pair.0 as u32, pair.1 as u32),
-                None => (),
+            if !file_data.file_contents_buffer.is_line_beginning() {
+                file_data.file_contents_buffer.move_cursor_left();
+                cursor::move_left(1);
             }
         }
         _ => (),
