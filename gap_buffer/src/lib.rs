@@ -1,8 +1,9 @@
 use core::fmt;
 
-const GROW_SIZE: usize = 200;
+const GROW_SIZE: usize = 50;
 // cursor highlights character 1 AFTER the gaps end
 const CURSOR_OFFSET: usize = 1;
+
 pub struct GapBuffer {
     buffer: Vec<char>,
     gap_begin: usize,
@@ -25,9 +26,9 @@ impl fmt::Debug for GapBuffer {
 impl GapBuffer {
     pub fn new(content: Option<String>) -> GapBuffer {
         let mut gap_buffer = GapBuffer {
-            buffer: vec!['\0'; 200],
+            buffer: vec!['\0'; 75],
             gap_begin: 0,
-            gap_end: 199,
+            gap_end: 74,
         };
 
         if let Some(string) = content {
@@ -45,7 +46,7 @@ impl GapBuffer {
             self.grow_buffer();
         }
     }
-    pub fn move_cursor_right(&mut self) {
+    pub fn move_gap_right(&mut self) {
         match self.buffer.get(self.gap_end + 1) {
             Some(c) => {
                 let tmp = self.buffer[self.gap_begin];
@@ -57,7 +58,7 @@ impl GapBuffer {
                 self.gap_begin += 1;
                 self.gap_end += 1;
             }
-            None => panic!("this should be caught by fn is_end_line"),
+            None => panic!("this should be caught by fn is_line_end"),
         }
     }
 
@@ -111,10 +112,93 @@ impl GapBuffer {
             None => return true,
         }
     }
-    pub fn is_line_end(&self) -> bool {
+    pub fn next_is_eof(&self) -> bool {
+        match self.buffer.get(self.gap_end + CURSOR_OFFSET + 1) {
+            Some(_) => {
+                return false;
+            }
+            None => return true,
+        }
+    }
+    pub fn is_first_line(&self) -> bool {
+        let mut i = 0;
+        if self.gap_begin == 0 {
+            return true;
+        }
+        loop {
+            match self.buffer.get(self.gap_begin - i) {
+                Some(c) => {
+                    if *c == '\n' {
+                        return false;
+                    }
+                }
+                None => return true,
+            }
+            i += 1;
+        }
+    }
+    pub fn is_last_line(&self) -> bool {
+        let mut i = 0;
+        loop {
+            match self.buffer.get(self.gap_end + CURSOR_OFFSET + i) {
+                Some(c) => {
+                    if *c == '\n' {
+                        match self.buffer.get(self.gap_end + CURSOR_OFFSET + i + 1) {
+                            None => return true,
+                            _ => break,
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                None => return true,
+            }
+        }
+        return false;
+    }
+    pub fn next_is_line_end(&self) -> bool {
         match self.buffer.get(self.gap_end + CURSOR_OFFSET + 1) {
             Some(c) => {
                 if *c == '\n' {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            None => return true,
+        }
+    }
+    pub fn cursor_is_newline(&self) -> bool {
+        match self.buffer.get(self.gap_end + CURSOR_OFFSET) {
+            Some(c) => {
+                if *c == '\n' {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            None => return true,
+        }
+    }
+    pub fn before_cursor_is_newline(&self) -> bool {
+        if self.gap_begin < 1 {
+            return true;
+        }
+        match self.buffer.get(self.gap_begin - 1) {
+            Some(c) => {
+                if *c == '\n' {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            None => return true,
+        }
+    }
+    pub fn next_is_space(&self) -> bool {
+        match self.buffer.get(self.gap_end + CURSOR_OFFSET + 1) {
+            Some(c) => {
+                if *c == ' ' {
                     return true;
                 } else {
                     return false;
@@ -128,7 +212,7 @@ impl GapBuffer {
             print!(
                 "before{:?}, after{:?}",
                 self.buffer.get(self.gap_begin - 1),
-                self.buffer.get(self.gap_end + 1)
+                self.buffer.get(self.gap_end + CURSOR_OFFSET)
             );
         }
     }
@@ -137,7 +221,7 @@ impl GapBuffer {
     /// the newline character '\n' or eof is reached, whichever comes first.
 
     pub fn grab_to_line_end(&self) -> String {
-        let v = &self.buffer[self.gap_end + 1..];
+        let v = &self.buffer[(self.gap_end + CURSOR_OFFSET)..];
         v.iter().take_while(|c| **c != '\n').collect()
     }
     /// takes a reference to self, movement selection, current line, current col, and decides
@@ -152,40 +236,6 @@ impl GapBuffer {
         curr_col: usize,
     ) -> Option<(usize, usize)> {
         match movement {
-            "down" => {
-                let cursor_end = self.gap_end + 1;
-                let mut v = self.buffer[cursor_end..].iter();
-
-                let first_index = v.by_ref().position(|i| *i == '\n');
-                let second_index = v.by_ref().position(|i| *i == '\n');
-
-                let next_line = &self.buffer
-                    [cursor_end + first_index? + 1..=cursor_end + first_index? + second_index?];
-
-                let mut new_col = curr_col;
-
-                for i in (0..=curr_col).rev() {
-                    if i == 0 {
-                        return None;
-                    }
-
-                    // curr col is 1 based indexed, need to subtract that off for accuracy
-                    match next_line.get(i - 1) {
-                        Some(_) => {
-                            new_col = i;
-                            break;
-                        }
-                        None => (),
-                    }
-                }
-                // move the cursor past the newline that we found, then to the new column - 1
-                // because the terminal cursor is 1 based
-                let movement_right = (first_index? + 1) + (new_col - 1);
-                for _ in 0..movement_right {
-                    self.move_cursor_right();
-                }
-                return Some((curr_line + 1, new_col));
-            }
             "up" => {
                 if curr_line == 1 {
                     return None;

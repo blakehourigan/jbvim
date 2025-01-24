@@ -77,7 +77,7 @@ pub fn move_home() {
 }
 pub fn return_newline() {
     let cursor = Cursor::get_cursor_coords();
-    move_cursor_to(&cursor.line + 1, cursor.col)
+    move_cursor_to(cursor.line + 1, 1);
 }
 pub fn save_cursor_position() {
     write!(io::stdout(), "\x1b[s").unwrap_or_else(|e| panic!("io error{e}"))
