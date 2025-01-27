@@ -26,7 +26,6 @@ impl EditorMode {
 pub struct FileData {
     pub file_name: String,
     pub file_handle: fs::File,
-    pub file_contents_buffer: GapBuffer,
 }
 
 impl FileData {
@@ -39,26 +38,15 @@ impl FileData {
         };
 
         let file_handle;
-        let file_contents;
         //if Path::new(&file_name).exists() {
         // open the file and read the lines into the terminal... or
         // at least collect it so that it is easy to do so later.
         file_handle = fs::File::open(&file_name).unwrap();
-        file_contents = fs::read_to_string(&file_name).unwrap();
-        tui::write_existing_file(&file_contents);
-        //}
-        let file_contents_buffer = GapBuffer::new(Some(file_contents));
 
         Ok(FileData {
             file_name,
             file_handle,
-            file_contents_buffer,
         })
-    }
-    pub fn save_file_contents(&mut self) {
-        let data = self.file_contents_buffer.get_content();
-
-        fs::write(format!("./{}", self.file_name), data).expect("should write to /file_name");
     }
 }
 pub struct EditorState {

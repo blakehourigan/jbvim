@@ -4,12 +4,12 @@ use std::io::{self, BufRead, Write};
 
 #[derive(Debug)]
 pub struct Cursor {
-    pub line: u32,
-    pub col: u32,
+    pub line: usize,
+    pub col: usize,
 }
 
 impl Cursor {
-    fn new(line: u32, col: u32) -> Cursor {
+    fn new(line: usize, col: usize) -> Cursor {
         Cursor { line, col }
     }
     /// constructs new instance of cursor with current and curosor row and col
@@ -45,7 +45,7 @@ impl Cursor {
             .map(|c| c.to_digit(10).expect("not a number!"))
             .fold(0, |acc, elem| acc * 10 + elem);
 
-        Cursor::new(line, col)
+        Cursor::new(line as usize, col as usize)
     }
 }
 pub fn enable_bar_cursor() {
@@ -68,7 +68,7 @@ pub fn move_down(num: u32) {
     write!(io::stdout(), "\x1b[{num}B",).unwrap_or_else(|e| panic!("io error{e}"))
 }
 
-pub fn move_cursor_to(line: u32, column: u32) {
+pub fn move_cursor_to(line: usize, column: usize) {
     // syntax for the escape is line;column
     write!(io::stdout(), "\x1b[{line};{column}f").unwrap_or_else(|e| panic!("io error{e}"))
 }

@@ -63,7 +63,7 @@ fn update_cursor(editor_state: &mut EditorState) {
 fn draw_info_tui(window_inf: &InformationBar) {
     let cursor = Cursor::get_cursor_coords();
     cursor::save_cursor_position();
-    cursor::move_cursor_to(window_inf.row, 1);
+    cursor::move_cursor_to(window_inf.row.try_into().unwrap(), 1);
 
     // editor_data.cursor.mode(cursor::modes::bold);
     let color = Colors::Red as i32;
@@ -81,8 +81,11 @@ fn draw_info_tui(window_inf: &InformationBar) {
     cursor::reset_modes();
 }
 
-fn draw_cursor_location(window_inf: &InformationBar, color: i32, line: u32, col: u32) {
-    cursor::move_cursor_to(window_inf.row, window_inf.cursor_location_col);
+fn draw_cursor_location(window_inf: &InformationBar, color: i32, line: usize, col: usize) {
+    cursor::move_cursor_to(
+        window_inf.row.try_into().unwrap(),
+        window_inf.cursor_location_col.try_into().unwrap(),
+    );
 
     cursor::set_background(color);
 
@@ -92,24 +95,27 @@ fn draw_cursor_location(window_inf: &InformationBar, color: i32, line: u32, col:
 
 fn draw_command_field(window_inf: &InformationBar) {
     draw_line(
-        window_inf.command_row,
-        window_inf.length as usize,
+        window_inf.command_row.try_into().unwrap(),
+        window_inf.length.try_into().unwrap(),
         Colors::Black as i32,
     );
-    cursor::move_cursor_to(window_inf.command_row, 1);
+    cursor::move_cursor_to(window_inf.command_row.try_into().unwrap(), 1);
 
     write!(io::stdout(), ":").unwrap_or_else(|e| panic!("failed io operation: {e}"));
 }
 
 fn draw_mode(window_inf: &InformationBar, mode: &str) {
     cursor::save_cursor_position();
-    cursor::move_cursor_to(window_inf.command_row, window_inf.editor_mode_col);
+    cursor::move_cursor_to(
+        window_inf.command_row.try_into().unwrap(),
+        window_inf.editor_mode_col.try_into().unwrap(),
+    );
 
     write!(io::stdout(), "{}", mode).unwrap_or_else(|e| panic!("failed io operation: {e}"));
     cursor::restore_cursor_position();
 }
 
-fn draw_line(line_num: u32, length: usize, color: i32) {
+fn draw_line(line_num: usize, length: usize, color: i32) {
     cursor::save_cursor_position();
     cursor::move_cursor_to(line_num, 1);
 
