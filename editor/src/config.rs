@@ -1,5 +1,3 @@
-use crate::tui;
-use gap_buffer::GapBuffer;
 use std::fs;
 
 #[derive(Clone, Copy, PartialEq, Debug)]

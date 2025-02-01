@@ -49,6 +49,9 @@ pub fn update_tui(editor_state: &mut EditorState) {
             }
         }
     }
+    io::stdout()
+        .flush()
+        .unwrap_or_else(|e| panic!("io error occurred during flush: {e}"));
 }
 
 fn update_cursor(editor_state: &mut EditorState) {
@@ -127,21 +130,18 @@ fn draw_line(line_num: usize, length: usize, color: i32) {
 
     cursor::restore_cursor_position();
 }
-pub fn update_line(mut line: String, is_backspace: bool) {
-    if is_backspace {
-        line.push_str("  ");
-    }
+
+pub fn update_line(line: String) {
     cursor::save_cursor_position();
     write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
     cursor::restore_cursor_position();
 }
 
-pub fn write_existing_file(file_contents: &String) {
-    for c in file_contents.chars() {
-        if c == '\n' {
-            write!(io::stdout(), "\r\n").unwrap_or_else(|e| panic!("failed io operation: {e}"));
-        } else {
-            write!(io::stdout(), "{}", c).unwrap_or_else(|e| panic!("failed io operation: {e}"));
-        }
+pub fn write_existing_file(file_contents: String) {
+    let mut line_num = 1;
+    for line in file_contents.lines() {
+        cursor::move_cursor_to(line_num, 1);
+        write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+        line_num += 1
     }
 }

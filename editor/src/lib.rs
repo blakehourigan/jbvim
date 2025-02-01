@@ -17,49 +17,35 @@ struct EditorConfig {
     file_data: FileData,
     gap_buffer: GapBuffer<GapBuffer<char>>,
 }
-fn load_exiting_file_content(file_contents: String) -> GapBuffer<GapBuffer<char>> {
-    let mut content_buffer = GapBuffer::new();
-    for line in file_contents.lines() {
-        let mut line_buf = GapBuffer::new();
 
-        for c in line.chars() {
-            line_buf.insert_left(c);
-        }
-        line_buf.insert_left('\n');
-        line_buf.reset();
-        content_buffer.insert_left(line_buf);
-    }
-    content_buffer.reset();
-    content_buffer
+fn initialize_tui_state() {
+    cursor::move_home();
+    cursor::save_cursor_position();
+    terminol::enable_alternate_buffer();
+    terminol::clear_screen();
 }
 fn setup_terminal(cmd_args: env::Args) -> EditorConfig {
     let mut editor_state = EditorState::new(EditorMode::Normal, EditorMode::Normal);
     let original_settings = terminol::enable_raw_mode();
 
-    cursor::move_home();
-    cursor::save_cursor_position();
-    terminol::enable_alternate_buffer();
-    terminol::clear_screen();
-
-    tui::update_tui(&mut editor_state);
-    io::stdout().flush().unwrap();
+    initialize_tui_state();
 
     let file_data = FileData::build(cmd_args).unwrap_or_else(|err| {
         println!("problem parsing args: {err}");
         //graceful_exit(&original_settings);
-        process::exit(1)
+        panic!("broken")
     });
+
     let file_contents = fs::read_to_string(&file_data.file_name).unwrap();
 
-    let mut content_buffer = load_exiting_file_content(file_contents);
+    let max_size = terminol::get_terminal_size().ws_col as usize - 50;
+    let content_buffer = GapBuffer::build_nested(&file_contents, max_size);
 
-    //print!("{:?}", &content_buffer);
-    tui::write_existing_file(&content_buffer.get_content());
+    let content = content_buffer.get_content();
+    tui::write_existing_file(content);
 
     cursor::restore_cursor_position();
-    io::stdout()
-        .flush()
-        .unwrap_or_else(|e| panic!("io error occurred during flush: {e}"));
+    tui::update_tui(&mut editor_state);
 
     EditorConfig {
         editor_state,
@@ -108,10 +94,6 @@ pub fn run(cmd_args: env::Args) -> Result<Termios, Box<dyn Error>> {
             }
         };
         tui::update_tui(&mut editor_config.editor_state);
-
-        io::stdout()
-            .flush()
-            .unwrap_or_else(|e| panic!("io error occurred during flush: {e}"));
     }
     Ok(editor_config.original_settings)
 }
@@ -137,8 +119,7 @@ fn normal_mode_handler(
         }
         b'v' => editor_state.update_editor_mode(EditorMode::Visual),
         b'a' => {
-            cursor::move_right(1);
-            content_buffer.move_gap_right();
+            move_right(line_buf);
             editor_state.update_editor_mode(EditorMode::Insert);
         }
         b'0' => {
@@ -147,17 +128,17 @@ fn normal_mode_handler(
         }
 
         b'$' => {
-            let len = line_buf.buffer.len();
-            let mut new_col = 0;
-            for _ in 0..len {
-                if !line_buf.next_is_empty() {
-                    line_buf.move_gap_right();
-                    new_col += 1;
-                } else {
-                    break;
-                }
+            let line = Cursor::get_cursor_coords().line;
+            let len = line_buf.grab_to_end(true).len();
+
+            line_buf.move_to_last_char();
+            cursor::move_cursor_to(line, len);
+        }
+        b'w' => {
+            let i = line_buf.move_to_next_word();
+            for _ in 0..i {
+                cursor::move_right(1);
             }
-            cursor::move_cursor_to(line, new_col);
         }
         _ => (),
     }
@@ -168,40 +149,52 @@ fn insert_mode_handler(
     editor_state: &mut EditorState,
     content_buffer: &mut GapBuffer<GapBuffer<char>>,
 ) {
-    let line_buf = content_buffer.get_nested();
     match input[0] {
         // return/enter
         13 => {
-            line_buf.insert_left('\n');
-            cursor::return_newline();
+            let line = Cursor::get_cursor_coords().line;
+            content_buffer.move_line_contents_enter(line);
+            terminol::clear_end_of_screen();
         }
         //backspace
         127 => {
-            line_buf.delete_item();
-            cursor::backspace();
-            let line_end = line_buf.grab_to_end();
-            // tell tui that we need to update the line we're on with the content we just got
-            // after our current position
-            cursor::write_char(&input[0]);
-            tui::update_line(line_end, true);
+            // if at beginning of line then move the lines contents up to the last line
+            // only if it does not exceed the limit for length of the terminal window
+            let line_buf = content_buffer.get_nested();
+            terminol::clear_end_of_line();
+
+            if line_buf.is_buf_begin() {
+                let line = Cursor::get_cursor_coords().line;
+                content_buffer.move_line_contents_backspace(line, line - 1);
+            } else {
+                line_buf.delete_item();
+                cursor::backspace();
+                let line_end = line_buf.grab_to_end(false);
+                // tell tui that we need to update the line we're on with the content we just got
+                // after our current position
+                cursor::write_char(&input[0]);
+                tui::update_line(line_end);
+            }
         }
         // <C-c> | Esc
         3 | 27 | 183 | 184 | 185 | 186 => {
             basic_movement_handler(input, content_buffer, editor_state);
         }
         _ => {
+            let line_buf = content_buffer.get_nested();
             if line_buf.is_line_end() {
                 line_buf.insert_left(input[0] as char);
                 cursor::write_char(&input[0]);
             } else {
                 // insert the char
-                line_buf.insert_left(input[0] as char);
+                terminol::clear_end_of_line();
                 // grab from 1 after the gaps end until the next newline or until the eof
-                let line_end = line_buf.grab_to_end();
+                let line_end = line_buf.grab_to_end(false);
+                line_buf.insert_left(input[0] as char);
+                cursor::write_char(&input[0]);
                 // tell tui that we need to update the line we're on with the content we just got
                 // after our current position
-                cursor::write_char(&input[0]);
-                tui::update_line(line_end, false);
+                tui::update_line(line_end);
             }
         }
     };
@@ -219,66 +212,81 @@ fn basic_movement_handler(
         3 | 27 => editor_state.update_editor_mode(EditorMode::Normal),
         // up arrow or k key
         183 | b'k' => {
-            if !content_buffer.last_is_first() {
+            if content_buffer.is_first_line() {
+                return;
+            } else {
                 content_buffer.move_gap_left();
-                let line = Cursor::get_cursor_coords().line - 1;
-                let col = Cursor::get_cursor_coords().col;
-                // get new line
                 let line_buf = content_buffer.get_nested();
+                let line_len = line_buf.get_len();
 
-                let mut new_col = 0;
-                for _ in 0..col {
-                    if !line_buf.next_is_empty() {
-                        line_buf.move_gap_right();
-                        new_col += 1;
-                    } else {
-                        break;
-                    }
+                line_buf.reset();
+
+                let line = Cursor::get_cursor_coords().line;
+                let new_line = line - 1;
+
+                let col = Cursor::get_cursor_coords().col;
+
+                let new_col;
+
+                if line_len >= col {
+                    new_col = col;
+                } else {
+                    new_col = line_len;
                 }
-                cursor::move_cursor_to(line, new_col);
+
+                for _ in 1..new_col {
+                    line_buf.move_gap_right();
+                }
+
+                cursor::move_cursor_to(new_line, new_col);
             }
         }
         // down arrow or j key
         184 | b'j' => {
-            if !content_buffer.next_is_empty() {
-                content_buffer.move_gap_right();
-                let line = Cursor::get_cursor_coords().line + 1;
+            content_buffer.move_gap_right();
+            if content_buffer.is_last_line() {
+                content_buffer.move_gap_left();
+                return;
+            } else {
+                let line_buf = content_buffer.get_nested();
+                let line_len = line_buf.get_len();
+
+                line_buf.reset();
+
+                let line = Cursor::get_cursor_coords().line;
+                let new_line = line + 1;
+
                 let col = Cursor::get_cursor_coords().col;
 
-                let line_buf = content_buffer.get_nested();
-                let mut new_col = 0;
-                for _ in 0..col {
-                    if !line_buf.next_is_empty() {
-                        line_buf.move_gap_right();
-                        new_col += 1;
-                    } else {
-                        break;
-                    }
+                let new_col;
+
+                if line_len >= col {
+                    new_col = col;
+                } else {
+                    new_col = line_len;
                 }
-                cursor::move_cursor_to(line, new_col);
+
+                for _ in 0..(new_col - 1) {
+                    line_buf.move_gap_right();
+                }
+
+                cursor::move_cursor_to(new_line, new_col);
             }
         }
         // right arrow or l key
         185 | b'l' => {
-            let line = Cursor::get_cursor_coords().line + 1;
-            let col = Cursor::get_cursor_coords().col;
-
             let line_buf = content_buffer.get_nested();
             if !line_buf.is_line_end() {
-                line_buf.move_gap_right();
-                cursor::move_right(1);
+                move_right(line_buf);
             }
         }
         // left arrow or h key
         186 | b'h' => {
-            let line = Cursor::get_cursor_coords().line + 1;
-            let col = Cursor::get_cursor_coords().col;
-
             let line_buf = content_buffer.get_nested();
-            if !line_buf.is_line_begin() {
-                line_buf.move_gap_left();
-                cursor::move_left(1);
+            if line_buf.is_buf_begin() {
+                return;
             }
+            move_left(line_buf);
         }
         _ => (),
     }
@@ -362,4 +370,13 @@ pub fn save_file_contents(file_data: &FileData, content_buffer: &mut GapBuffer<G
     let data = content_buffer.get_content();
 
     fs::write(format!("./{}", file_data.file_name), data).expect("should write to /file_name");
+}
+
+fn move_right(line_buf: &mut GapBuffer<char>) {
+    line_buf.move_gap_right();
+    cursor::move_right(1);
+}
+fn move_left(line_buf: &mut GapBuffer<char>) {
+    line_buf.move_gap_left();
+    cursor::move_left(1);
 }

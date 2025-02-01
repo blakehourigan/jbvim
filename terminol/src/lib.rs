@@ -66,14 +66,19 @@ pub fn disable_alternate_buffer() {
 pub fn clear_screen() {
     write!(io::stdout(), "\x1b[2J").unwrap_or_else(|e| panic!("std io error, {e}"))
 }
+pub fn clear_end_of_line() {
+    write!(io::stdout(), "\x1b[0K").unwrap_or_else(|e| panic!("std io error, {e}"))
+}
+pub fn clear_end_of_screen() {
+    write!(io::stdout(), "\x1b[0J").unwrap_or_else(|e| panic!("std io error, {e}"))
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn get_size() {
+        print!("{}", get_terminal_size().ws_col);
     }
 }
