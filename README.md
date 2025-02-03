@@ -10,11 +10,11 @@ A vim inspired editor written in rust.
 
 ## Software Requirements
 
-- The final version of this software was written and tested only using Arch Linux, the [Alacritty](https://wiki.archlinux.org/title/Alacritty) terminal environment, and the [fish shell](https://fishshell.com/blog/fish-4b/) (v4.0b1). Other software may not play nicely with the **terminol** crate that I developed to interact with the terminal's standard output. 
+- The final version of this software was written and tested only using Arch Linux, the [Alacritty](https://wiki.archlinux.org/title/Alacritty) terminal environment, tmux, and the [fish shell](https://fishshell.com/blog/fish-4b/) (v4.0b1). Other software may not play nicely with the **terminol** crate that I developed to interact with the terminal's standard output. 
 
 
 ## Installation
-As of this moment, none of these crates have been published to crates.io. This may happen at a later date for supporting crates such as **terminol**. As such, one can install and run this program by following these steps:
+As of writing, none of these crates have been published to crates.io. This may happen at a later date for supporting crates such as **terminol**. As such, one can install and run this program by following these steps:
 
 1. **Clone this repository to a local directory on your linux machine**
    - As long as you have [git](https://git-scm.com/) installed, this can be done by executing the following in your local terminal:

@@ -1,5 +1,6 @@
 use crate::{EditorMode, EditorState};
 use std::io::{self, Write};
+use std::str::Lines;
 use terminol::cursor;
 use terminol::{Colors, Cursor};
 
@@ -134,6 +135,15 @@ fn draw_line(line_num: usize, length: usize, color: i32) {
 pub fn update_line(line: String) {
     cursor::save_cursor_position();
     write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+    cursor::restore_cursor_position();
+}
+pub fn update_below(start: usize, end: usize, mut content: Lines) {
+    cursor::save_cursor_position();
+    for i in start..end {
+        cursor::move_cursor_to(i + 1, 1);
+        let line = content.next().unwrap();
+        write!(io::stdout(), "{}", line).unwrap_or_else(|e| panic!("failed io operation: {e}"));
+    }
     cursor::restore_cursor_position();
 }
 

@@ -11,6 +11,8 @@ use std::process;
 use terminol::{cursor, Cursor};
 use termios::Termios;
 
+const RIGHT_SIDE_PADDING: usize = 50;
+
 struct EditorConfig {
     editor_state: EditorState,
     original_settings: Termios,
@@ -32,13 +34,13 @@ fn setup_terminal(cmd_args: env::Args) -> EditorConfig {
 
     let file_data = FileData::build(cmd_args).unwrap_or_else(|err| {
         println!("problem parsing args: {err}");
-        //graceful_exit(&original_settings);
-        panic!("broken")
+        graceful_exit(&original_settings);
+        process::exit(0);
     });
 
     let file_contents = fs::read_to_string(&file_data.file_name).unwrap();
 
-    let max_size = terminol::get_terminal_size().ws_col as usize - 50;
+    let max_size = terminol::get_terminal_size().ws_col as usize - RIGHT_SIDE_PADDING;
     let content_buffer = GapBuffer::build_nested(&file_contents, max_size);
 
     let content = content_buffer.get_content();
@@ -128,11 +130,11 @@ fn normal_mode_handler(
         }
 
         b'$' => {
-            let line = Cursor::get_cursor_coords().line;
-            let len = line_buf.grab_to_end(true).len();
-
-            line_buf.move_to_last_char();
-            cursor::move_cursor_to(line, len);
+            //let line = Cursor::get_cursor_coords().line;
+            //let len = line_buf.grab_to_end(true).len();
+            // move to char at the end of the line
+            let col = line_buf.move_to_last_char();
+            cursor::move_cursor_to(line, col + 1);
         }
         b'w' => {
             let i = line_buf.move_to_next_word();
@@ -144,6 +146,24 @@ fn normal_mode_handler(
     }
 }
 
+fn enter_handler(content_buffer: &mut GapBuffer<GapBuffer<char>>) {
+    let line = Cursor::get_cursor_coords().line;
+    content_buffer.move_line_contents_enter(line);
+
+    let content = content_buffer.get_content();
+    let mut content = content.lines();
+    let len = content_buffer.get_filled_items();
+
+    for _ in 0..line {
+        content.next();
+    }
+
+    terminol::clear_end_of_screen();
+    cursor::move_cursor_to(line + 1, 1);
+
+    tui::update_below(line, len, content);
+}
+
 fn insert_mode_handler(
     input: &[u8],
     editor_state: &mut EditorState,
@@ -152,24 +172,38 @@ fn insert_mode_handler(
     match input[0] {
         // return/enter
         13 => {
-            let line = Cursor::get_cursor_coords().line;
-            content_buffer.move_line_contents_enter(line);
-            terminol::clear_end_of_screen();
+            enter_handler(content_buffer);
         }
         //backspace
         127 => {
             // if at beginning of line then move the lines contents up to the last line
             // only if it does not exceed the limit for length of the terminal window
             let line_buf = content_buffer.get_nested();
-            terminol::clear_end_of_line();
 
             if line_buf.is_buf_begin() {
+                terminol::clear_end_of_screen();
                 let line = Cursor::get_cursor_coords().line;
-                content_buffer.move_line_contents_backspace(line, line - 1);
+                // handle the backspace data structure operation
+                let line_len = content_buffer.move_line_contents_backspace(line);
+                let gui_len = line_len + 1;
+
+                let content = content_buffer.get_content();
+                let mut content = content.lines();
+                let len = content_buffer.get_filled_items();
+
+                for _ in 0..line - 2 {
+                    content.next();
+                }
+
+                cursor::move_cursor_to(line - 1, gui_len);
+                tui::update_below(line - 2, len, content);
             } else {
+                terminol::clear_end_of_line();
+
                 line_buf.delete_item();
                 cursor::backspace();
                 let line_end = line_buf.grab_to_end(false);
+
                 // tell tui that we need to update the line we're on with the content we just got
                 // after our current position
                 cursor::write_char(&input[0]);
@@ -181,15 +215,23 @@ fn insert_mode_handler(
             basic_movement_handler(input, content_buffer, editor_state);
         }
         _ => {
+            let max_size = terminol::get_terminal_size().ws_col as usize - RIGHT_SIDE_PADDING;
+            let line_buf_items = content_buffer.get_nested().get_filled_items();
+
+            if line_buf_items + 1 >= max_size {
+                enter_handler(content_buffer);
+            }
+
             let line_buf = content_buffer.get_nested();
+
             if line_buf.is_line_end() {
                 line_buf.insert_left(input[0] as char);
                 cursor::write_char(&input[0]);
             } else {
-                // insert the char
                 terminol::clear_end_of_line();
                 // grab from 1 after the gaps end until the next newline or until the eof
                 let line_end = line_buf.grab_to_end(false);
+                // insert the char to the gap and the tui
                 line_buf.insert_left(input[0] as char);
                 cursor::write_char(&input[0]);
                 // tell tui that we need to update the line we're on with the content we just got
@@ -260,7 +302,9 @@ fn basic_movement_handler(
 
                 let new_col;
 
-                if line_len >= col {
+                if line_len == 0 {
+                    new_col = 1;
+                } else if line_len >= col {
                     new_col = col;
                 } else {
                     new_col = line_len;

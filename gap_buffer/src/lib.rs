@@ -45,6 +45,9 @@ where
             }
         }
     }
+    pub fn get_filled_items(&self) -> usize {
+        self.filled_items
+    }
     pub fn reset(&mut self) {
         while self.gap_begin != 0 {
             self.move_gap_left();
@@ -66,6 +69,7 @@ where
             self.retrieve_item_mut(self.gap_begin - 1).take();
             self.gap_begin -= 1;
         }
+        self.filled_items -= 1;
     }
     /// This function inserts the current cursored item at the beginning of the gap and then moves the gap to the right
     /// If the gaps end is equal the the total length of the buffer, then you cannot move the
@@ -107,8 +111,6 @@ fn reformat_string(s: &str, max_line_len: usize) -> String {
     let mut c: Vec<char> = s.chars().collect();
     let len = c.len();
 
-    let len = c.len();
-
     let mut replace = Vec::new();
     let mut j = 0;
     for i in 0..len {
@@ -130,7 +132,6 @@ fn reformat_string(s: &str, max_line_len: usize) -> String {
         c[replace[i]] = '\n';
     }
     let final_string = c.iter().collect();
-    //print!("\n\n\n\n\n\n\n\n\n{:?}", final_string);
     final_string
 }
 
@@ -155,7 +156,7 @@ impl GapBuffer<GapBuffer<char>> {
         }
     }
     pub fn is_last_line(&self) -> bool {
-        if self.gap_end == self.buffer.len() - 1 {
+        if self.gap_end + 1 == self.buffer.len() {
             true
         } else {
             false
@@ -195,33 +196,44 @@ impl GapBuffer<GapBuffer<char>> {
             None => panic!("there is no buffer where you are trying to reach!!!!"),
         }
     }
-    pub fn move_line_contents_backspace(&mut self, from: usize, to: usize) {
-        let line = self.get_line(from);
-        let line_two_content = line.grab_to_end(true);
+    pub fn move_line_contents_backspace(&mut self, from: usize) -> usize {
+        let destination = from - 1;
+        // grab all the content from the line we are moving from
+        let del_line = self.get_line(from);
+        let del_line_content = del_line.grab_to_end(true);
+        let del_line_len = del_line_content.len();
 
         // delete removes the PREVIOUS item, so we need to move right to remove the line we are
         // CURRENTLY manipulating
         self.move_gap_right();
         self.delete_item();
 
-        let line = self.get_line(to);
+        let dest_line = self.get_line(destination);
+        let dest_line_len = dest_line.get_len();
 
-        //line.append_string_to_endline();
-        line.move_to_last_char();
-        line.insert_left(' ');
-        for c in line_two_content.chars() {
-            line.insert_left(c);
+        // moving to last char makes the final char in the line the NEXT item, so that we do not
+        // exceed the items in the line with our cursor. we actually want to insert after this, so
+        // we move right again
+        dest_line.move_to_last_char();
+        dest_line.move_gap_right();
+
+        for c in del_line_content.chars() {
+            dest_line.insert_left(c);
         }
+
+        for _ in 0..del_line_len {
+            dest_line.move_gap_left();
+        }
+        dest_line_len
     }
     pub fn move_line_contents_enter(&mut self, line: usize) {
-        ////split off where we pressed enter
+        //grab line content from where we pressed enter
         let line_buf = self.get_line(line);
-
-        //get content after the split
         let end_of_line_cntnt = line_buf.grab_to_end(false);
 
         //move to the end of the line and delete everything we took from the og line
         line_buf.move_to_last_char();
+        line_buf.move_gap_right();
 
         for _ in 0..end_of_line_cntnt.len() {
             line_buf.delete_item();
@@ -241,7 +253,6 @@ impl GapBuffer<GapBuffer<char>> {
         // move back left so that once you start inserting again you are inserting to the line you
         // just created
         self.move_gap_left();
-        //print!("\n\n\n\n{:?}", self.get_content());
     }
 }
 impl GapBuffer<char> {
@@ -276,7 +287,6 @@ impl GapBuffer<char> {
                 buffer.reset();
             }
         }
-        //print!("{:?}", buffer);
         buffer
     }
 
@@ -291,12 +301,24 @@ impl GapBuffer<char> {
         buffer.retain(|c| c.is_some());
         buffer.iter().map(|i| i.unwrap()).collect()
     }
-    pub fn move_to_last_char(&mut self) {
-        let len = self.grab_to_end(true).len();
-
-        for _ in 0..len {
+    /// this function takes a reference to a GapBuffer<char> struct and moves the buffer to just
+    /// BEFORE the last CHAR (not newline
+    pub fn move_to_last_char(&mut self) -> usize {
+        self.reset();
+        let mut i = 0;
+        while !self.is_line_end() {
             self.move_gap_right();
+            i += 1;
         }
+        i
+
+        //let len = self.grab_to_end(true).len();
+
+        //if len != 0 {
+        //    for _ in 0..(len - 1) {
+        //        self.move_gap_right();
+        //    }
+        //}
     }
     /// this function gets the length of the string inside of the buffer structure
     pub fn get_len(&self) -> usize {
@@ -320,22 +342,27 @@ impl GapBuffer<char> {
     pub fn grab_to_end(&mut self, full_line: bool) -> String {
         if full_line {
             self.reset();
-        } else {
-            ()
         }
-        let v = self.buffer.get(self.gap_end + CURRENT_ITEM_OFFSET..);
-        match v {
-            Some(v) => v
-                .iter()
-                .filter(|c| c.is_some())
-                .map(|c| c.unwrap())
-                .take_while(|c| *c != '\n')
-                .collect(),
+
+        let s;
+        let cur_to_end = self.buffer.get(self.gap_end + CURRENT_ITEM_OFFSET..);
+        match cur_to_end {
+            Some(slice) => {
+                s = slice
+                    .iter()
+                    .filter(|c| c.is_some())
+                    .map(|c| c.unwrap())
+                    .take_while(|c| *c != '\n')
+                    .collect()
+            }
             None => panic!("grabbed something out of bounds here"),
         }
+        s
     }
-    pub fn is_line_end(&mut self) -> bool {
-        if self.get_len() == self.gap_begin {
+    // takes a reference to a GapBuffer<char> struct and checks if the gap's end is at the last
+    // char in the buffer
+    pub fn is_line_end(&self) -> bool {
+        if self.gap_end + 3 == self.buffer.len() || self.get_len() == 0 {
             true
         } else {
             false
@@ -536,7 +563,7 @@ mod tests {
         let expected = format!("{} {}", expected_init_line, expected_additional);
 
         let mut buffer = load_file(file);
-        buffer.move_line_contents_backspace(41, 40);
+        buffer.move_line_contents_backspace(41);
 
         let actual = buffer.get_line(40).grab_to_end(true);
 
